@@ -21,7 +21,7 @@ export async function GET() {
 
   const { data: channels } = await db
     .from("channels")
-    .select("id, platform, url, username, status, baseline_followers, verified_at")
+    .select("id, platform, url, username, status, baseline_followers, verified_at, created_at")
     .eq("student_id", sid)
     .neq("status", "removed")
     .order("created_at");

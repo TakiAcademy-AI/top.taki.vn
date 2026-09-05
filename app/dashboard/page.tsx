@@ -7,7 +7,7 @@ import { Lane, LBRow, METRIC_LABEL, PF_ICON, ProfileModal, SiteHeader, useToast 
 
 type Me = {
   student: { public_id: string; full_name: string; class_name: string | null };
-  channels: { id: string; platform: string; username: string; status: string }[];
+  channels: { id: string; platform: string; username: string; status: string; created_at: string }[];
   stats: {
     followers7: number; views7: number; videos7: number;
     followers7prev: number; views7prev: number;
@@ -46,6 +46,23 @@ export default function DashboardPage() {
   const [newChan, setNewChan] = useState({ platform: "tiktok", url: "" });
   const [profileId, setProfileId] = useState<string | null>(null);
   const [detailRows, setDetailRows] = useState<any[] | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+
+  async function selfVerify(channelId: string) {
+    setVerifyingId(channelId);
+    toast("Đang quét kênh của bạn…");
+    try {
+      const r = await fetch("/api/me/verify-channel", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_id: channelId }),
+      });
+      const d = await r.json();
+      if (d.status === "verified") { toast("✅ Đã xác minh kênh! Bắt đầu tính điểm từ hôm nay."); load(); }
+      else toast(d.message ?? d.error ?? "Chưa xác minh được, thử lại sau.");
+    } finally {
+      setVerifyingId(null);
+    }
+  }
 
   const load = useCallback(async () => {
     const r = await fetch("/api/me");
@@ -149,16 +166,42 @@ export default function DashboardPage() {
                       <span>{pf.label} · {statParts}</span>
                     </div>
                     {c.status === "verified" && <span className="st st-ok">Đã xác minh</span>}
-                    {c.status === "pending" && <span className="st st-wait">Chờ xác minh</span>}
                     {c.status === "flagged" && <span className="st st-flag">Bị gắn cờ</span>}
+                    {c.status === "pending" && (
+                      <>
+                        <span className="st st-wait">Chờ xác minh</span>
+                        <button
+                          className="btn-ghost btn-sm"
+                          disabled={verifyingId === c.id}
+                          onClick={() => selfVerify(c.id)}
+                        >
+                          {verifyingId === c.id ? "Đang quét…" : "Xác minh ngay"}
+                        </button>
+                      </>
+                    )}
                   </div>
                 );
               })}
-              {me.channels.some((c) => c.status === "pending") && (
-                <p className="mini-note">
-                  Để xác minh: chèn mã <b>{me.student.public_id}</b> vào bio/mô tả kênh trong vòng 48 giờ. Hệ thống quét và tự xác minh.
-                </p>
-              )}
+              {me.channels.some((c) => c.status === "pending") && (() => {
+                const stale = me.channels.some((c) => {
+                  if (c.status !== "pending") return false;
+                  const days = (Date.now() - new Date(c.created_at).getTime()) / 86_400_000;
+                  return days >= 2;
+                });
+                return (
+                  <div className={stale ? "pending-warn" : undefined} style={stale ? undefined : {}}>
+                    {stale && (
+                      <p className="mini-note" style={{ color: "var(--red)", fontWeight: 700, marginBottom: 4 }}>
+                        ⚠️ Có kênh chờ xác minh đã quá 2 ngày! Kênh chưa xác minh <b>không được tính điểm</b>.
+                      </p>
+                    )}
+                    <p className="mini-note">
+                      Cách xác minh: chèn mã <b>{me.student.public_id}</b> vào bio/mô tả kênh, rồi bấm{" "}
+                      <b>“Xác minh ngay”</b> (hoặc chờ hệ thống tự quét lúc 5:30 sáng).
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="grid grid-3" style={{ marginTop: 16 }}>

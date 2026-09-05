@@ -243,3 +243,7 @@ tr:last-child td{border-bottom:none}
 .sb-item.on .ext{color:#C9D3EC}
 .sb-sub{font-size:12.5px}
 .sb-note{margin-top:auto;font-size:10.5px;color:var(--muted);padding:14px 10px 4px;border-top:1px dashed var(--line);line-height:1.5}
+
+/* Cảnh báo kênh treo pending quá lâu (dashboard học viên) */
+.pending-warn{background:#FDECEC;border:1px solid #F3C1C1;border-radius:10px;padding:10px 12px;margin-top:8px}
+.pending-warn .mini-note:last-child{color:var(--navy)}
