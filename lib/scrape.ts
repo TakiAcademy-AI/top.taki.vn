@@ -59,10 +59,12 @@ export async function scrapeTikTokProfile(username: string): Promise<NormalizedP
   const impersonate = path.join(process.cwd(), "bin", "curl_chrome131");
   const useImpersonate = fs.existsSync(impersonate);
   const bin = useImpersonate ? impersonate : "curl";
+  const proxy = process.env.SCRAPE_PROXY;
   const args = [
     "-sL",
     "--compressed",
     "--max-time", "40",
+    ...(proxy ? ["-x", proxy] : []),
     "-c", jar, "-b", jar,
     // curl_chrome131 tự set đầy đủ headers Chrome; curl thường thì tự thêm
     ...(useImpersonate ? [] : Object.entries(BROWSER_HEADERS).flatMap(([k, v]) => ["-H", `${k}: ${v}`])),
@@ -99,13 +101,32 @@ export async function scrapeTikTokProfile(username: string): Promise<NormalizedP
   };
 }
 
-/* ==== Facebook: binary `fb` đọc trang công khai ở chế độ ẩn danh ==== */
+/* ==== Facebook: binary `fb` đọc trang công khai ====
+ * Mặc định đọc ẩn danh. IP máy chủ bị FB bắt đăng nhập -> đặt env FB_C_USER + FB_XS
+ * (2 cookie từ tài khoản FB phụ đang đăng nhập) để import session, hoặc SCRAPE_PROXY. */
+let fbSessionImported = false;
+async function ensureFbSession(bin: string): Promise<void> {
+  if (fbSessionImported) return;
+  fbSessionImported = true;
+  const cUser = process.env.FB_C_USER;
+  const xs = process.env.FB_XS;
+  if (!cUser || !xs) return;
+  try {
+    await pexec(bin, ["auth", "import", "--c-user", cUser, "--xs", xs, "--data-dir", "/tmp/fb-cli"], { timeout: 30_000 });
+  } catch (e: any) {
+    console.error("[fb auth import]", String(e?.stderr || e?.message).slice(0, 200));
+  }
+}
+
 export async function scrapeFacebookPage(username: string): Promise<NormalizedProfile | null> {
   const bin = path.join(process.cwd(), "bin", "fb");
+  await ensureFbSession(bin);
+  const proxy = process.env.SCRAPE_PROXY;
   try {
     const { stdout } = await pexec(
       bin,
-      ["page", username, "-o", "json", "-q", "--no-posts", "--data-dir", "/tmp/fb-cli", "--cache-ttl", "0s"],
+      ["page", username, "-o", "json", "-q", "--no-posts", "--data-dir", "/tmp/fb-cli", "--cache-ttl", "0s",
+       ...(proxy ? ["--proxy", proxy] : [])],
       { timeout: 90_000, maxBuffer: 10 * 1024 * 1024 }
     );
     let d: any = JSON.parse(stdout);
