@@ -101,52 +101,71 @@ export async function scrapeTikTokProfile(username: string): Promise<NormalizedP
   };
 }
 
-/* ==== Facebook: binary `fb` đọc trang công khai ====
- * Mặc định đọc ẩn danh. IP máy chủ bị FB bắt đăng nhập -> đặt env FB_C_USER + FB_XS
- * (2 cookie từ tài khoản FB phụ đang đăng nhập) để import session, hoặc SCRAPE_PROXY. */
-let fbSessionImported = false;
-async function ensureFbSession(bin: string): Promise<void> {
-  if (fbSessionImported) return;
-  fbSessionImported = true;
-  const cUser = process.env.FB_C_USER;
-  const xs = process.env.FB_XS;
-  if (!cUser || !xs) return;
-  try {
-    await pexec(bin, ["auth", "import", "--c-user", cUser, "--xs", xs, "--data-dir", "/tmp/fb-cli"], { timeout: 30_000 });
-  } catch (e: any) {
-    console.error("[fb auth import]", String(e?.stderr || e?.message).slice(0, 200));
-  }
+/* ==== Facebook: fetch trang công khai bằng curl-impersonate (giả TLS Chrome, qua chặn IP datacenter) ====
+ * Parse og:description — chứa số CHÍNH XÁC: "{tên}. {likes} likes · {talking} talking about this. {bio}".
+ * Page thì likes ≈ followers, dùng likes làm số theo dõi (chính xác hơn text '11K' rút gọn của HTML).
+ * fb-cli (signed-in) không dùng vì đăng nhập lại KHÔNG trả follower. Hỗ trợ SCRAPE_PROXY nếu cần. */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 }
 
 export async function scrapeFacebookPage(username: string): Promise<NormalizedProfile | null> {
-  const bin = path.join(process.cwd(), "bin", "fb");
-  await ensureFbSession(bin);
   const proxy = process.env.SCRAPE_PROXY;
+  const impersonate = path.join(process.cwd(), "bin", "curl_chrome131");
+  const bin = fs.existsSync(impersonate) ? impersonate : "curl";
+  const url = /^\d+$/.test(username)
+    ? `https://www.facebook.com/profile.php?id=${username}`
+    : `https://www.facebook.com/${encodeURIComponent(username)}`;
+  const args = ["-sL", "--compressed", "--max-time", "40", ...(proxy ? ["-x", proxy] : []), url];
+
+  let htmlText: string;
   try {
-    const { stdout } = await pexec(
-      bin,
-      ["page", username, "-o", "json", "-q", "--no-posts", "--data-dir", "/tmp/fb-cli", "--cache-ttl", "0s",
-       ...(proxy ? ["--proxy", proxy] : [])],
-      { timeout: 90_000, maxBuffer: 10 * 1024 * 1024 }
-    );
-    let d: any = JSON.parse(stdout);
-    if (Array.isArray(d)) d = d[0];
-    if (!d?.id) return null;
-    const bio = typeof d.bio === "object" ? String(d.bio?.text ?? "") : String(d.bio ?? "");
-    return {
-      ref: String(d.handle ?? username).toLowerCase(),
-      followers: num(d.followers),
-      totalViews: null,
-      videosCount: null,
-      engagement: null,
-      bio,
-      raw: { engine: "facebook-cli", name: d.name, likes: num(d.likes), category: d.category ?? null },
-    };
+    const { stdout } = await pexec(bin, args, { timeout: 50_000, maxBuffer: 20 * 1024 * 1024 });
+    htmlText = stdout;
   } catch (e: any) {
-    // trang bắt đăng nhập / binary lỗi -> failed, giữ điểm cũ; ném kèm chi tiết để lưu vào snapshot
-    const detail = String(e?.stderr || e?.message || e).replace(/\s+/g, " ").slice(0, 300);
-    throw new Error(detail || "fb-cli failed");
+    throw new Error(String(e?.stderr || e?.message || e).slice(0, 200) || "curl failed");
   }
+
+  const mDesc = htmlText.match(/og:description" content="([^"]+)"/);
+  const mTitle = htmlText.match(/og:title" content="([^"]+)"/);
+  if (!mDesc) {
+    // trang bắt đăng nhập hoàn toàn / đổi cấu trúc
+    throw new Error(`không thấy og:description (html ${htmlText.length} bytes${htmlText.includes("login") ? ", có tường login" : ""})`);
+  }
+  const desc = decodeEntities(mDesc[1]);
+  const name = mTitle ? decodeEntities(mTitle[1]) : "";
+
+  // "{likes} likes · {talking} talking about this. {bio}" (cũng có biến thể 'followers'/'people follow this')
+  const likes = desc.match(/([\d.,]+)\s*(?:likes|lượt thích)/i);
+  const followersTxt = desc.match(/([\d.,]+)\s*(?:followers|người theo dõi)/i);
+  const talking = desc.match(/([\d.,]+)\s*(?:talking about this|người đang nói)/i);
+  const toNum = (m: RegExpMatchArray | null) => (m ? num(m[1].replace(/[.,]/g, "")) : null);
+  const followers = toNum(followersTxt) ?? toNum(likes); // ưu tiên followers, fallback likes
+
+  // bio = phần sau mệnh đề số liệu cuối cùng (…likes · …followers · …talking about this.)
+  let bio = desc;
+  const metrics = [...desc.matchAll(/[\d.,]+\s*(?:likes|lượt thích|followers|người theo dõi|talking about this|người đang nói)/gi)];
+  if (metrics.length) {
+    const last = metrics[metrics.length - 1];
+    bio = desc.slice(last.index! + last[0].length).replace(/^[·.\s]+/, "");
+  } else if (name && desc.startsWith(name)) {
+    bio = desc.slice(name.length).replace(/^[.\s]+/, "");
+  }
+
+  if (followers == null && !bio) throw new Error("og:description không parse được số liệu");
+
+  return {
+    ref: username.toLowerCase(),
+    followers,
+    totalViews: null,
+    videosCount: null,
+    engagement: toNum(talking),
+    bio,
+    raw: { engine: "facebook-curl", name, likes: toNum(likes), talking: toNum(talking) },
+  };
 }
 
 /* ==== Lưu snapshot + xác minh bio (cùng logic với pipeline cũ) ==== */
