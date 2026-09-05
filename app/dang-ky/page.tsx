@@ -26,6 +26,7 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [classId, setClassId] = useState("");
   const [chans, setChans] = useState<ChanInput[]>([{ platform: "tiktok", url: "" }]);
+  const [platforms, setPlatforms] = useState<{ value: string; label: string }[]>([]);
   const [busy, setBusy] = useState(false);
   // Luồng OTP khi SĐT đã tồn tại
   const [otpMode, setOtpMode] = useState(false);
@@ -34,6 +35,11 @@ export default function RegisterPage() {
   const [profileId, setProfileId] = useState<string | null>(null);
 
   useEffect(() => {
+    fetch("/api/platforms").then((r) => r.json()).then((d) => {
+      const list = d.platforms ?? [];
+      setPlatforms(list);
+      if (list.length) setChans([{ platform: list[0].value, url: "" }]);
+    }).catch(() => {});
     fetch("/api/me").then((r) => { if (r.ok) router.replace("/dashboard"); }).catch(() => {});
     fetch("/api/campaigns/open").then((r) => r.json()).then((d) => {
       setCampaign(d.campaign);
@@ -153,10 +159,7 @@ export default function RegisterPage() {
               {chans.map((c, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, marginBottom: 8 }}>
                   <select value={c.platform} onChange={(e) => setChans(chans.map((x, j) => (j === i ? { ...x, platform: e.target.value } : x)))}>
-                    <option value="tiktok">TikTok</option>
-                    <option value="youtube">YouTube</option>
-                    <option value="facebook">Facebook</option>
-                    <option value="instagram">Instagram</option>
+                    {platforms.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
                   <input
                     value={c.url}
@@ -165,7 +168,7 @@ export default function RegisterPage() {
                   />
                 </div>
               ))}
-              <button className="btn-ghost btn-sm" onClick={() => setChans([...chans, { platform: "tiktok", url: "" }])}>
+              <button className="btn-ghost btn-sm" onClick={() => setChans([...chans, { platform: platforms[0]?.value ?? "tiktok", url: "" }])}>
                 + Thêm kênh
               </button>
               <p className="mini-note">

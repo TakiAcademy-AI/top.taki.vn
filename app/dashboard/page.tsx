@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [newChan, setNewChan] = useState({ platform: "tiktok", url: "" });
+  const [platforms, setPlatforms] = useState<{ value: string; label: string }[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [detailRows, setDetailRows] = useState<any[] | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -63,6 +64,14 @@ export default function DashboardPage() {
       setVerifyingId(null);
     }
   }
+
+  useEffect(() => {
+    fetch("/api/platforms").then((r) => r.json()).then((d) => {
+      const list = d.platforms ?? [];
+      setPlatforms(list);
+      if (list.length) setNewChan((n) => ({ ...n, platform: list[0].value }));
+    }).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/me");
@@ -271,10 +280,7 @@ export default function DashboardPage() {
             <div className="field">
               <label>Nền tảng</label>
               <select value={newChan.platform} onChange={(e) => setNewChan({ ...newChan, platform: e.target.value })}>
-                <option value="tiktok">TikTok</option>
-                <option value="youtube">YouTube</option>
-                <option value="facebook">Facebook</option>
-                <option value="instagram">Instagram</option>
+                {platforms.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
             </div>
             <div className="field">
