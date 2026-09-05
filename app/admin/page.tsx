@@ -320,9 +320,14 @@ export default function AdminPage() {
   }
 
   async function verifyChannel(chId: string) {
+    toast("Đang quét kênh để lấy số liệu gốc…");
     const r = await fetch(`/api/admin/channels/${chId}/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    if (r.ok) { toast("Đã xác minh kênh"); openProfile(profile.student.id); loadStudents(q); }
-    else toast((await r.json()).error ?? "Lỗi");
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      const fl = d.baseline_followers != null ? Number(d.baseline_followers).toLocaleString("vi-VN") : "—";
+      toast(`Đã xác minh · mốc gốc ${fl} follower (${d.source ?? "—"})`);
+      openProfile(profile.student.id); loadStudents(q);
+    } else toast(d.error ?? "Lỗi");
   }
 
   async function removeChannel(chId: string, username: string) {
