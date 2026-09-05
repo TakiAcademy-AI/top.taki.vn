@@ -126,11 +126,19 @@ export default function RegisterPage() {
             {campaign?.prize ? ` Giải thưởng: ${campaign.prize}.` : ""}
           </p>
           {campaign && (
-            <div className="meta">
-              <div><b>{campaign.students.toLocaleString("vi-VN")}</b><span>học viên đã vào đua</span></div>
-              <div><b>{campaign.channels.toLocaleString("vi-VN")}</b><span>kênh đang theo dõi</span></div>
-              <div>
-                <span>Kết thúc sau</span>
+            <div className="reg-meta">
+              <div className="reg-stats">
+                <div className="reg-pill">
+                  <b>{campaign.students.toLocaleString("vi-VN")}</b>
+                  <span>học viên đã vào đua</span>
+                </div>
+                <div className="reg-pill">
+                  <b>{campaign.channels.toLocaleString("vi-VN")}</b>
+                  <span>kênh đang theo dõi</span>
+                </div>
+              </div>
+              <div className="reg-countdown">
+                <span className="lbl">⏳ Kết thúc sau</span>
                 <Countdown endDate={campaign.end_date} />
               </div>
             </div>
