@@ -112,8 +112,10 @@ export async function runDailyScoring(date: string): Promise<ScoringReport> {
       const dVid = prev.videos_count == null ? 0 : clamp0((today.videos_count ?? 0) - prev.videos_count);
       const dE = prev.engagement == null ? 0 : clamp0(Number(today.engagement ?? 0) - Number(prev.engagement));
 
-      // Chống gian lận: follower tăng vượt fraudMult × trung bình 7 ngày
-      // và tỷ lệ tương tác/follower dưới ngưỡng -> gắn cờ, treo điểm ngày này
+      // Chống gian lận — gắn cờ, treo điểm ngày này nếu dính 1 trong 2 luật:
+      //  (A) Tăng đột biến tuyệt đối: follower tăng 1 ngày > SPIKE_RATIO × baseline (kể cả kênh MỚI,
+      //      chưa đủ lịch sử 7 ngày) — chặn kênh vừa vào đã bơm follower/like ăn điểm khổng lồ.
+      //  (B) Luật cũ theo lịch sử: tăng vượt fraudMult × trung bình 7 ngày VÀ tương tác/follower thấp.
       const hist: number[] = [];
       for (let i = 7; i >= 1; i--) {
         const a = byDate?.get(addDays(date, -i - 1));
@@ -122,14 +124,18 @@ export async function runDailyScoring(date: string): Promise<ScoringReport> {
       }
       const avg7 = hist.length ? hist.reduce((s, x) => s + x, 0) / hist.length : 0;
       const engRatio = (today.followers ?? 0) > 0 ? dE / (today.followers ?? 1) : 0;
-      if (hist.length >= 3 && avg7 > 0 && dF > fraudMult * avg7 && engRatio < fraudRatio) {
+      const baseline = ch.baseline_followers ?? 0;
+      const spikeRatio = Number(process.env.FRAUD_SPIKE_RATIO || 2); // >200% baseline / ngày
+      const spike = baseline > 0 && dF > spikeRatio * baseline;
+      const byHistory = hist.length >= 3 && avg7 > 0 && dF > fraudMult * avg7 && engRatio < fraudRatio;
+      if (spike || byHistory) {
         await db.from("channels").update({ status: "flagged" }).eq("id", ch.id);
         await db.from("audit_logs").insert({
           actor_id: "system",
           action: "flag_channel",
           target_type: "channel",
           target_id: ch.id,
-          detail: { date, delta_follower: dF, avg7, engagement_ratio: engRatio },
+          detail: { date, delta_follower: dF, baseline, avg7, engagement_ratio: engRatio, rule: spike ? "spike_vs_baseline" : "spike_vs_avg7" },
         });
         report.flagged.push(`${ch.platform}:@${ch.username}`);
         continue;
