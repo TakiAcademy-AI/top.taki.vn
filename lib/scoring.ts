@@ -103,9 +103,19 @@ export async function runDailyScoring(date: string): Promise<ScoringReport> {
         report.scrapeFailed.push(`${ch.platform}:@${ch.username}`);
         continue; // kênh lỗi quét: giữ điểm hôm qua, không chặn kênh khác
       }
+      // Mốc so sánh (prev): dùng snapshot HÔM QUA — NHƯNG chỉ khi hôm qua kênh ĐÃ xác minh.
+      // Nếu hôm qua kênh còn 'pending' (chưa xác minh), snapshot đó là dữ liệu TRƯỚC khi vào đua,
+      // KHÔNG được tính -> quay về baseline (số chốt tại thời điểm xác minh). Đảm bảo tăng trưởng
+      // trong thời gian pending / follower có sẵn không bao giờ thành điểm.
+      const prevDay = addDays(date, -1);
+      const verifiedDay = ch.verified_at
+        ? new Date(new Date(ch.verified_at).getTime() + 7 * 3_600_000).toISOString().slice(0, 10)
+        : null;
+      const prevSnap = byDate?.get(prevDay);
       const prev: Partial<Snapshot> =
-        byDate?.get(addDays(date, -1)) ??
-        ({ followers: ch.baseline_followers, total_views: ch.baseline_views, videos_count: null, engagement: null } as Partial<Snapshot>);
+        prevSnap && (!verifiedDay || prevDay >= verifiedDay)
+          ? prevSnap
+          : ({ followers: ch.baseline_followers, total_views: ch.baseline_views, videos_count: null, engagement: null } as Partial<Snapshot>);
 
       const dF = clamp0((today.followers ?? 0) - (prev.followers ?? today.followers ?? 0));
       const dV = clamp0(Number(today.total_views ?? 0) - Number(prev.total_views ?? today.total_views ?? 0));
