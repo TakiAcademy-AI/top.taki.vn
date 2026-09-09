@@ -119,7 +119,9 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
   const url = /^\d+$/.test(username)
     ? `https://www.facebook.com/profile.php?id=${username}`
     : `https://www.facebook.com/${encodeURIComponent(username)}`;
-  const args = ["-sL", "--compressed", "--max-time", "40", ...(proxy ? ["-x", proxy] : []), url];
+  // Ép FB trả HTML tiếng Anh nhất quán (IP máy chủ hay nhận tiếng Việt "người theo dõi" -> lệch regex)
+  const args = ["-sL", "--compressed", "--max-time", "40", "-H", "Accept-Language: en-US,en;q=0.9",
+    ...(proxy ? ["-x", proxy] : []), url];
 
   let htmlText: string;
   try {
@@ -161,7 +163,7 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
   // dạng "text":"0 followers" / "text":"1.5K followers" -> lấy từ HTML làm fallback.
   let followers = toNum(followersDesc) ?? toNum(likes);
   if (followers == null) {
-    const mHtml = htmlText.match(/"text":"([\d.,]+\s*[KkMm]?)\s*followers?"/i);
+    const mHtml = htmlText.match(/"text":"([\d.,]+\s*[KkMm]?)\s*(?:followers?|người theo dõi)"/i);
     if (mHtml) followers = parseCount(mHtml[1]);
   }
 
