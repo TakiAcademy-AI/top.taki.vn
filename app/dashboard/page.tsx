@@ -7,7 +7,7 @@ import { Lane, LBRow, METRIC_LABEL, PF_ICON, ProfileModal, SiteHeader, useToast 
 
 type Me = {
   student: { public_id: string; full_name: string; class_name: string | null };
-  channels: { id: string; platform: string; username: string; status: string; created_at: string }[];
+  channels: { id: string; platform: string; username: string; url: string; status: string; created_at: string }[];
   stats: {
     followers7: number; views7: number; videos7: number;
     followers7prev: number; views7prev: number;
@@ -43,6 +43,7 @@ export default function DashboardPage() {
   const [campIdx, setCampIdx] = useState(0);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [newChan, setNewChan] = useState({ platform: "tiktok", url: "" });
   const [platforms, setPlatforms] = useState<{ value: string; label: string }[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -99,19 +100,25 @@ export default function DashboardPage() {
     setHistory(d.entries ?? []);
   }
 
-  async function addChannel() {
-    const r = await fetch("/api/channels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newChan),
-    });
+  async function saveChannel() {
+    const r = editId
+      ? await fetch(`/api/channels/${editId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newChan) })
+      : await fetch("/api/channels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newChan) });
     const d = await r.json();
     if (r.ok) {
-      toast("Đã thêm kênh. Gắn mã ID vào bio để xác minh trong 48 giờ.");
+      toast(editId ? "Đã sửa kênh. Nhớ gắn mã ID vào bio rồi bấm Xác minh." : "Đã thêm kênh. Gắn mã ID vào bio để xác minh.");
       setShowAdd(false);
-      setNewChan({ platform: "tiktok", url: "" });
+      setEditId(null);
+      setNewChan({ platform: platforms[0]?.value ?? "tiktok", url: "" });
       load();
-    } else toast(d.error ?? "Không thêm được kênh");
+    } else toast(d.error ?? "Không lưu được kênh");
+  }
+
+  async function deleteMyChannel(id: string, username: string) {
+    if (!confirm(`Xóa kênh @${username}? (chỉ xóa được kênh chưa xác minh)`)) return;
+    const r = await fetch(`/api/channels/${id}`, { method: "DELETE" });
+    if (r.ok) { toast("Đã xóa kênh"); load(); }
+    else toast((await r.json()).error ?? "Không xóa được");
   }
 
   async function logout() {
@@ -179,13 +186,14 @@ export default function DashboardPage() {
                     {c.status === "pending" && (
                       <>
                         <span className="st st-wait">Chờ xác minh</span>
-                        <button
-                          className="btn-ghost btn-sm"
-                          disabled={verifyingId === c.id}
-                          onClick={() => selfVerify(c.id)}
-                        >
+                        <button className="btn-ghost btn-sm" disabled={verifyingId === c.id} onClick={() => selfVerify(c.id)}>
                           {verifyingId === c.id ? "Đang quét…" : "Xác minh ngay"}
                         </button>
+                        <button className="btn-ghost btn-sm" title="Sửa link kênh"
+                          onClick={() => { setEditId(c.id); setNewChan({ platform: c.platform, url: c.url ?? "" }); setShowAdd(true); }}>
+                          Sửa
+                        </button>
+                        <button className="btn-ghost btn-sm btn-danger" title="Xóa kênh" onClick={() => deleteMyChannel(c.id, c.username)}>✕</button>
                       </>
                     )}
                   </div>
@@ -274,9 +282,9 @@ export default function DashboardPage() {
       </div>
 
       {showAdd && (
-        <div className="modal-bg" onClick={() => setShowAdd(false)}>
+        <div className="modal-bg" onClick={() => { setShowAdd(false); setEditId(null); }}>
           <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 14 }}>Thêm kênh mới</h3>
+            <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 14 }}>{editId ? "Sửa kênh" : "Thêm kênh mới"}</h3>
             <div className="field">
               <label>Nền tảng</label>
               <select value={newChan.platform} onChange={(e) => setNewChan({ ...newChan, platform: e.target.value })}>
@@ -287,7 +295,7 @@ export default function DashboardPage() {
               <label>Link kênh</label>
               <input value={newChan.url} onChange={(e) => setNewChan({ ...newChan, url: e.target.value })} placeholder="Dán link kênh" />
             </div>
-            <button className="btn" onClick={addChannel}>Thêm kênh</button>
+            <button className="btn" onClick={saveChannel}>{editId ? "Lưu thay đổi" : "Thêm kênh"}</button>
           </div>
         </div>
       )}

@@ -34,10 +34,15 @@ export async function GET(req: NextRequest) {
   let prevFollowersByStudent = new Map<string, number>();
 
   if (detail) {
-    const { data: entries } = await db
-      .from("score_entries")
-      .select("student_id, metric, points, entry_date")
-      .eq("campaign_id", campaignId);
+    const ids0 = (data ?? []).map((r: any) => r.student_id);
+    // entries + channels độc lập -> chạy SONG SONG
+    const [entriesRes, chansRes] = await Promise.all([
+      db.from("score_entries").select("student_id, metric, points, entry_date").eq("campaign_id", campaignId),
+      ids0.length
+        ? db.from("channels").select("id, student_id, platform, username, url").in("student_id", ids0).eq("status", "verified")
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const entries = entriesRes.data;
     for (const e of entries ?? []) {
       if (!lastEntryDate || e.entry_date > lastEntryDate) lastEntryDate = e.entry_date;
     }
@@ -49,13 +54,9 @@ export async function GET(req: NextRequest) {
         todayByStudent.set(e.student_id, (todayByStudent.get(e.student_id) ?? 0) + Number(e.points));
       }
     }
-    const ids = (data ?? []).map((r: any) => r.student_id);
-    if (ids.length) {
-      const { data: chans } = await db
-        .from("channels")
-        .select("id, student_id, platform, username, url")
-        .in("student_id", ids)
-        .eq("status", "verified");
+    const ids = ids0;
+    {
+      const chans = chansRes.data;
       const chById = new Map<string, any>();
       for (const c of chans ?? []) chById.set(c.id, c);
 

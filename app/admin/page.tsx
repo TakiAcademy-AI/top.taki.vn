@@ -109,6 +109,18 @@ export default function AdminPage() {
   const [profile, setProfile] = useState<any | null>(null);
   const [scrape, setScrape] = useState<any | null>(null);
   const [scrapeBusy, setScrapeBusy] = useState(false);
+  const [platforms, setPlatforms] = useState<{ value: string; label: string }[]>([]);
+  const [addChan, setAddChan] = useState<{ platform: string; url: string } | null>(null);
+
+  async function adminAddChannel() {
+    if (!addChan || !profile) return;
+    const r = await fetch(`/api/admin/students/${profile.student.id}/channels`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addChan),
+    });
+    const d = await r.json();
+    if (r.ok) { toast("Đã thêm kênh cho học viên"); setAddChan(null); openProfile(profile.student.id); loadStudents(q); }
+    else toast(d.error ?? "Không thêm được kênh");
+  }
 
   // Form tạo chiến dịch
   const [form, setForm] = useState({
@@ -144,6 +156,7 @@ export default function AdminPage() {
   useEffect(() => {
     loadCampaigns();
     fetch("/api/classes").then((r) => r.json()).then((d) => setClasses(d.classes ?? []));
+    fetch("/api/platforms").then((r) => r.json()).then((d) => setPlatforms(d.platforms ?? [])).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadStudents = useCallback(async (query: string) => {
@@ -772,6 +785,29 @@ export default function AdminPage() {
         )}
       </div>
 
+      {addChan && (
+        <div className="modal-bg" onClick={() => setAddChan(null)}>
+          <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 4 }}>➕ Thêm kênh cho học viên</h3>
+            <p className="mini-note" style={{ marginBottom: 14 }}>{profile?.student?.full_name} · {profile?.student?.public_id}</p>
+            <div className="field">
+              <label>Nền tảng</label>
+              <select value={addChan.platform} onChange={(e) => setAddChan({ ...addChan, platform: e.target.value })}>
+                {platforms.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Link kênh (chấp nhận cả link chia sẻ Facebook)</label>
+              <input value={addChan.url} onChange={(e) => setAddChan({ ...addChan, url: e.target.value })} placeholder="Dán link kênh" />
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn" style={{ width: "auto" }} onClick={adminAddChannel}>Thêm kênh</button>
+              <button className="btn-ghost" onClick={() => setAddChan(null)}>Hủy</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editCamp && (() => {
         const frozen = !["draft", "open"].includes(editCamp.status);
         return (
@@ -877,7 +913,11 @@ export default function AdminPage() {
               </button>
             </p>
 
-            <h4 style={{ fontWeight: 800, fontSize: 13, color: "var(--navy)", margin: "10px 0 8px" }}>Kênh</h4>
+            <h4 style={{ fontWeight: 800, fontSize: 13, color: "var(--navy)", margin: "10px 0 8px", display: "flex", alignItems: "center" }}>
+              Kênh
+              <button className="btn-ghost btn-sm" style={{ marginLeft: "auto" }}
+                onClick={() => setAddChan({ platform: platforms[0]?.value ?? "tiktok", url: "" })}>+ Thêm kênh</button>
+            </h4>
             {profile.channels.map((c: any) => (
               <div className="chan" key={c.id}>
                 <div className="u">

@@ -20,12 +20,18 @@ export async function GET() {
   const yesterday = addDays(today, -1);
   const weekAgo = addDays(today, -7);
 
-  // ===== Chiến dịch đang mở/chạy + lớp =====
-  const { data: camps } = await db
-    .from("campaigns")
-    .select("id, name, prize, prizes, scope, status, start_date, end_date, registration_deadline, campaign_classes(classes(id, name, code))")
-    .in("status", ["open", "running"])
-    .order("start_date", { ascending: false });
+  // ===== Query độc lập chạy SONG SONG (giảm round-trip tới DB) =====
+  const [campsRes, channelsRes, finishedRes] = await Promise.all([
+    db.from("campaigns")
+      .select("id, name, prize, prizes, scope, status, start_date, end_date, registration_deadline, campaign_classes(classes(id, name, code))")
+      .in("status", ["open", "running"])
+      .order("start_date", { ascending: false }),
+    db.from("channels").select("id, student_id, platform, status").neq("status", "removed"),
+    db.from("campaigns").select("id, name, end_date").eq("status", "finished").order("end_date", { ascending: false }).limit(2),
+  ]);
+  const camps = campsRes.data;
+  const channels = channelsRes.data;
+  const finished = finishedRes.data;
   const campIds = (camps ?? []).map((c) => c.id);
 
   let parts: any[] = [];
@@ -37,11 +43,7 @@ export async function GET() {
     parts = (data ?? []).filter((p: any) => p.students?.status === "active");
   }
 
-  // ===== Kênh & map học viên =====
-  const { data: channels } = await db
-    .from("channels")
-    .select("id, student_id, platform, status")
-    .neq("status", "removed");
+  // ===== Map học viên =====
   const channelsByStudent = new Map<string, number>();
   for (const c of channels ?? []) {
     channelsByStudent.set(c.student_id, (channelsByStudent.get(c.student_id) ?? 0) + 1);
@@ -171,31 +173,31 @@ export async function GET() {
     }
   }
 
-  // ===== Hall of Fame: top 3 các mùa đã kết thúc =====
-  const { data: finished } = await db
-    .from("campaigns")
-    .select("id, name, end_date")
-    .eq("status", "finished")
-    .order("end_date", { ascending: false })
-    .limit(2);
+  // ===== Hall of Fame: top 3 các mùa đã kết thúc (finished đã lấy song song ở trên) =====
   const hall_of_fame: any[] = [];
-  for (const f of finished ?? []) {
-    const { data: top } = await db
-      .from("campaign_participants")
-      .select("student_id, total_score, current_rank, students!inner(public_id, full_name)")
-      .eq("campaign_id", f.id)
-      .lte("current_rank", 3)
-      .order("current_rank");
-    if (top?.length) {
-      hall_of_fame.push({
-        campaign_name: f.name,
-        end_date: f.end_date,
-        top3: top.map((p: any) => ({
-          rank: p.current_rank, name: p.students.full_name,
-          public_id: p.students.public_id, total_score: Number(p.total_score),
-        })),
-      });
-    }
+  if (finished?.length) {
+    const tops = await Promise.all(
+      finished.map((f) =>
+        db.from("campaign_participants")
+          .select("student_id, total_score, current_rank, students!inner(public_id, full_name)")
+          .eq("campaign_id", f.id)
+          .lte("current_rank", 3)
+          .order("current_rank")
+      )
+    );
+    finished.forEach((f, i) => {
+      const top = tops[i].data;
+      if (top?.length) {
+        hall_of_fame.push({
+          campaign_name: f.name,
+          end_date: f.end_date,
+          top3: top.map((p: any) => ({
+            rank: p.current_rank, name: p.students.full_name,
+            public_id: p.students.public_id, total_score: Number(p.total_score),
+          })),
+        });
+      }
+    });
   }
 
   return NextResponse.json(
