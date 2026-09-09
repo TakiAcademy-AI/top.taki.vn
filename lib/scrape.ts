@@ -186,7 +186,14 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
     videosCount: null,
     engagement: toNum(talking),
     bio,
-    raw: { engine: "facebook-curl", name, likes: toNum(likes), talking: toNum(talking) },
+    raw: {
+      engine: "facebook-curl", name, likes: toNum(likes), talking: toNum(talking),
+      // debug khi không đọc được follower — soi VPS nhận HTML gì
+      ...(followers == null
+        ? { dbg_len: htmlText.length, dbg_has_follow: htmlText.includes("follower") || htmlText.includes("theo dõi"),
+            dbg_desc: desc.slice(0, 80), dbg_login: htmlText.slice(0, 300).toLowerCase().includes("log in") }
+        : {}),
+    },
   };
 }
 
