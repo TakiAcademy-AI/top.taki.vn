@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireStudent, jsonError } from "@/lib/api";
 import { normalizeChannel } from "@/lib/channels";
+import { resolveFacebookShareUrl } from "@/lib/scrape";
 import { todayVN } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,12 @@ export async function POST(req: NextRequest) {
 
   let ch;
   try {
-    ch = normalizeChannel(String(body.platform ?? ""), String(body.url ?? ""));
+    const platform = String(body.platform ?? "");
+    let url = String(body.url ?? "");
+    if (platform === "facebook" && /facebook\.com\/share\//i.test(url)) {
+      url = await resolveFacebookShareUrl(url);
+    }
+    ch = normalizeChannel(platform, url);
   } catch (e: any) {
     return jsonError(e.message);
   }

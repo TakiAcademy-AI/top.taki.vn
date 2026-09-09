@@ -56,12 +56,20 @@ export function normalizeChannel(platform: string, rawUrl: string): NormalizedCh
     if (segs[0]?.startsWith("@")) username = segs[0].slice(1);
     else if (["c", "channel", "user"].includes(segs[0] || "")) username = segs[1] || "";
     else username = segs[0] || "";
-  } else {
-    // facebook / instagram: segment đầu tiên là alias trang / username
-    username = (segs[0] || "").replace(/^@/, "");
-    if (p === "facebook" && username === "profile.php") {
-      username = u.searchParams.get("id") || "";
+  } else if (p === "facebook") {
+    // Nhiều dạng link FB học viên hay gửi:
+    if (segs[0] === "profile.php") {
+      username = u.searchParams.get("id") || "";                 // profile.php?id=123
+    } else if (segs[0] === "people") {
+      username = segs[segs.length - 1] || "";                    // /people/Tên/123/ -> id ở cuối
+    } else if (segs[0] === "share") {
+      throw new Error("Đây là link chia sẻ Facebook rút gọn — mở link trên trình duyệt rồi dán địa chỉ trang thật (dạng facebook.com/tentrang hoặc .../profile.php?id=...)");
+    } else {
+      username = (segs[0] || "").replace(/^@/, "");              // /tentrang
     }
+  } else {
+    // instagram
+    username = (segs[0] || "").replace(/^@/, "");
   }
   username = username.toLowerCase().replace(/[?#].*$/, "");
   if (!username) throw new Error(`Không bóc được username từ link: ${rawUrl}`);

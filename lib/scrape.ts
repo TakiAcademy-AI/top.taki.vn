@@ -101,6 +101,24 @@ export async function scrapeTikTokProfile(username: string): Promise<NormalizedP
   };
 }
 
+/** Link chia sẻ FB rút gọn (/share/xxx) -> theo redirect lấy URL trang thật (profile.php?id / /people/.../id).
+ *  Trả URL đích, hoặc URL gốc nếu không resolve được. */
+export async function resolveFacebookShareUrl(rawUrl: string): Promise<string> {
+  const impersonate = path.join(process.cwd(), "bin", "curl_chrome131");
+  const bin = fs.existsSync(impersonate) ? impersonate : "curl";
+  try {
+    const { stdout } = await pexec(
+      bin,
+      ["-sL", "-o", "/dev/null", "--max-time", "30", "-H", "Accept-Language: en-US,en;q=0.9", "-w", "%{url_effective}", rawUrl],
+      { timeout: 35_000, maxBuffer: 1024 * 1024 }
+    );
+    const finalUrl = stdout.trim();
+    return finalUrl && /facebook\.com/i.test(finalUrl) ? finalUrl : rawUrl;
+  } catch {
+    return rawUrl;
+  }
+}
+
 /* ==== Facebook: fetch trang công khai bằng curl-impersonate (giả TLS Chrome, qua chặn IP datacenter) ====
  * Parse og:description — chứa số CHÍNH XÁC: "{tên}. {likes} likes · {talking} talking about this. {bio}".
  * Page thì likes ≈ followers, dùng likes làm số theo dõi (chính xác hơn text '11K' rút gọn của HTML).

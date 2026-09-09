@@ -4,6 +4,7 @@ import { jsonError } from "@/lib/api";
 import { setSession } from "@/lib/session";
 import { normalizePhone, todayVN } from "@/lib/format";
 import { normalizeChannel } from "@/lib/channels";
+import { resolveFacebookShareUrl } from "@/lib/scrape";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,14 @@ export async function POST(req: NextRequest) {
 
   let normalized;
   try {
-    normalized = cleaned.map((c) => normalizeChannel(c.platform, c.url));
+    normalized = await Promise.all(cleaned.map(async (c) => {
+      let url = c.url;
+      // Link chia sẻ FB rút gọn -> tự theo redirect lấy trang thật, học viên khỏi thao tác
+      if (c.platform === "facebook" && /facebook\.com\/share\//i.test(url)) {
+        url = await resolveFacebookShareUrl(url);
+      }
+      return normalizeChannel(c.platform, url);
+    }));
   } catch (e: any) {
     return jsonError(e.message);
   }
