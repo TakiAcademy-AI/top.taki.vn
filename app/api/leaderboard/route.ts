@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { jsonError } from "@/lib/api";
+import { cached } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,17 @@ export async function GET(req: NextRequest) {
   const campaignId = req.nextUrl.searchParams.get("campaign_id");
   const detail = req.nextUrl.searchParams.get("detail") === "1";
   if (!campaignId) return jsonError("Thiếu campaign_id");
+  try {
+    const payload = await cached(`lb:${campaignId}:${detail ? 1 : 0}`, 60_000, () => buildLeaderboard(campaignId, detail));
+    return NextResponse.json(payload, {
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
+    });
+  } catch {
+    return jsonError("Không đọc được bảng xếp hạng", 500);
+  }
+}
+
+async function buildLeaderboard(campaignId: string, detail: boolean) {
   const db = supabaseAdmin();
 
   const { data, error } = await db
@@ -22,7 +34,7 @@ export async function GET(req: NextRequest) {
     .select("student_id, total_score, current_rank, prev_rank, rank_updated_on, students!inner(public_id, full_name, class_id, classes(name))")
     .eq("campaign_id", campaignId)
     .limit(500);
-  if (error) return jsonError("Không đọc được bảng xếp hạng", 500);
+  if (error) throw error;
 
   let breakdownByStudent = new Map<string, Record<string, number>>();
   let todayByStudent = new Map<string, number>();
@@ -129,8 +141,5 @@ export async function GET(req: NextRequest) {
     })
     .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
 
-  return NextResponse.json(
-    { rows, last_entry_date: lastEntryDate },
-    { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" } }
-  );
+  return { rows, last_entry_date: lastEntryDate };
 }

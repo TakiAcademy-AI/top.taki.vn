@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { addDays, todayVN } from "@/lib/format";
 import { PLATFORM_LABEL, Platform } from "@/lib/channels";
 import { autoStartCampaigns } from "@/lib/scoring";
+import { cached } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,13 @@ const MILESTONES = [1_000_000, 500_000, 100_000, 50_000, 10_000, 5_000, 1_000];
  * feed chiến tích tự sinh từ dữ liệu quét, hall of fame mùa đã kết thúc.
  */
 export async function GET() {
+  const payload = await cached("home", 60_000, () => buildHome());
+  return NextResponse.json(payload, {
+    headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
+  });
+}
+
+async function buildHome() {
   const db = supabaseAdmin();
   const today = todayVN();
   await autoStartCampaigns(today);
@@ -200,20 +208,17 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json(
-    {
-      today,
-      stats: {
-        students: distinctStudents.size,
-        channels: (channels ?? []).length,
-        followers7,
-        views7,
-      },
-      campaigns,
-      class_board,
-      feed: feed.slice(0, 8),
-      hall_of_fame,
+  return {
+    today,
+    stats: {
+      students: distinctStudents.size,
+      channels: (channels ?? []).length,
+      followers7,
+      views7,
     },
-    { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" } }
-  );
+    campaigns,
+    class_board,
+    feed: feed.slice(0, 8),
+    hall_of_fame,
+  };
 }

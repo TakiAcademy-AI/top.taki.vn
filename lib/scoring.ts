@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { addDays, isSunday } from "./format";
+import { invalidate } from "./cache";
 
 /**
  * Job tính điểm hàng ngày (06:00). Idempotent: chạy lại cùng ngày sẽ xóa các dòng
@@ -214,6 +215,8 @@ export async function runDailyScoring(date: string): Promise<ScoringReport> {
 
     await recomputeRanks(camp.id, date);
   }
+  invalidate("home");
+  invalidate("lb:"); // BXH cập nhật ngay sau khi tính điểm, không đợi cache 60s
   return report;
 }
 
