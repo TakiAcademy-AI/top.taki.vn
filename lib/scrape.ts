@@ -138,12 +138,32 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
   const desc = decodeEntities(mDesc[1]);
   const name = mTitle ? decodeEntities(mTitle[1]) : "";
 
-  // "{likes} likes · {talking} talking about this. {bio}" (cũng có biến thể 'followers'/'people follow this')
-  const likes = desc.match(/([\d.,]+)\s*(?:likes|lượt thích)/i);
-  const followersTxt = desc.match(/([\d.,]+)\s*(?:followers|người theo dõi)/i);
-  const talking = desc.match(/([\d.,]+)\s*(?:talking about this|người đang nói)/i);
-  const toNum = (m: RegExpMatchArray | null) => (m ? num(m[1].replace(/[.,]/g, "")) : null);
-  const followers = toNum(followersTxt) ?? toNum(likes); // ưu tiên followers, fallback likes
+  // "1.5K" / "11,712" -> số (K/M = nghìn/triệu, dấu phẩy = ngăn nghìn)
+  const parseCount = (s: string | undefined): number | null => {
+    if (!s) return null;
+    const m = s.trim().match(/^([\d.,]+)\s*([KkMm])?$/);
+    if (!m) return null;
+    let n = parseFloat(m[1].replace(/,/g, ""));
+    if (!Number.isFinite(n)) return null;
+    const suf = (m[2] || "").toLowerCase();
+    if (suf === "k") n *= 1000;
+    else if (suf === "m") n *= 1_000_000;
+    return Math.round(n);
+  };
+
+  // Page: "{likes} likes · {talking} talking about this. {bio}"
+  const likes = desc.match(/([\d.,]+\s*[KkMm]?)\s*(?:likes|lượt thích)/i);
+  const followersDesc = desc.match(/([\d.,]+\s*[KkMm]?)\s*(?:followers|người theo dõi)/i);
+  const talking = desc.match(/([\d.,]+\s*[KkMm]?)\s*(?:talking about this|người đang nói)/i);
+  const toNum = (m: RegExpMatchArray | null) => (m ? parseCount(m[1]) : null);
+
+  // Profile cá nhân (không phải Page): follower không nằm trong og:description mà trong JSON nhúng
+  // dạng "text":"0 followers" / "text":"1.5K followers" -> lấy từ HTML làm fallback.
+  let followers = toNum(followersDesc) ?? toNum(likes);
+  if (followers == null) {
+    const mHtml = htmlText.match(/"text":"([\d.,]+\s*[KkMm]?)\s*followers?"/i);
+    if (mHtml) followers = parseCount(mHtml[1]);
+  }
 
   // bio = phần sau mệnh đề số liệu cuối cùng (…likes · …followers · …talking about this.)
   let bio = desc;
