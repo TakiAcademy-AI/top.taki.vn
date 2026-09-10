@@ -334,8 +334,22 @@ export default function AdminPage() {
 
   async function verifyChannel(chId: string) {
     toast("Đang quét kênh để lấy số liệu gốc…");
-    const r = await fetch(`/api/admin/channels/${chId}/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    const d = await r.json().catch(() => ({}));
+    let r = await fetch(`/api/admin/channels/${chId}/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    let d = await r.json().catch(() => ({}));
+    // Quét lỗi (vd profile cá nhân FB không xem được follower) -> cho admin nhập mốc gốc thủ công
+    if (!r.ok) {
+      const bl = prompt(
+        "Không tự quét được kênh này.\n" +
+        "Nếu là trang Facebook cá nhân (không phải Fanpage/Page) thì Facebook ẩn follower — nên đổi sang Fanpage để hệ thống quét & tính điểm tự động.\n\n" +
+        "Hoặc nhập SỐ FOLLOWER hiện tại để xác minh thủ công (để trống = hủy):"
+      );
+      if (!bl || !bl.trim()) return;
+      r = await fetch(`/api/admin/channels/${chId}/verify`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseline_followers: Number(bl), baseline_views: 0 }),
+      });
+      d = await r.json().catch(() => ({}));
+    }
     if (r.ok) {
       const fl = d.baseline_followers != null ? Number(d.baseline_followers).toLocaleString("vi-VN") : "—";
       toast(`Đã xác minh · mốc gốc ${fl} follower (${d.source ?? "—"})`);
