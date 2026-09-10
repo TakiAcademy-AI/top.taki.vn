@@ -186,14 +186,16 @@ export default function DashboardPage() {
                     {c.status === "pending" && (
                       <>
                         <span className="st st-wait">Chờ xác minh</span>
-                        <button className="btn-ghost btn-sm" disabled={verifyingId === c.id} onClick={() => selfVerify(c.id)}>
-                          {verifyingId === c.id ? "Đang quét…" : "Xác minh ngay"}
-                        </button>
-                        <button className="btn-ghost btn-sm" title="Sửa link kênh"
-                          onClick={() => { setEditId(c.id); setNewChan({ platform: c.platform, url: c.url ?? "" }); setShowAdd(true); }}>
-                          Sửa
-                        </button>
-                        <button className="btn-ghost btn-sm btn-danger" title="Xóa kênh" onClick={() => deleteMyChannel(c.id, c.username)}>✕</button>
+                        <div className="chan-acts">
+                          <button className="btn-ghost btn-sm" disabled={verifyingId === c.id} onClick={() => selfVerify(c.id)}>
+                            {verifyingId === c.id ? "Đang quét…" : "Xác minh ngay"}
+                          </button>
+                          <button className="btn-ghost btn-sm" title="Sửa link kênh"
+                            onClick={() => { setEditId(c.id); setNewChan({ platform: c.platform, url: c.url ?? "" }); setShowAdd(true); }}>
+                            Sửa
+                          </button>
+                          <button className="btn-ghost btn-sm btn-danger" title="Xóa kênh" style={{ marginLeft: "auto" }} onClick={() => deleteMyChannel(c.id, c.username)}>✕</button>
+                        </div>
                       </>
                     )}
                   </div>

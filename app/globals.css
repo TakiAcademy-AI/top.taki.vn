@@ -75,13 +75,15 @@ label{font-weight:600;font-size:12.5px;display:block;margin-bottom:6px;color:var
 .id-card .row{display:flex;gap:26px;margin-top:14px;position:relative}
 .id-card .row b{display:block;font-size:14px}
 .id-card .row span{font-size:10.5px;color:#AAB6D8}
-.chan{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:9px}
+.chan{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:9px}
 .chan .pf{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:15px;color:#fff;flex-shrink:0}
 .pf-tiktok{background:#111}.pf-youtube{background:#E62117}.pf-facebook{background:#1877F2}.pf-instagram{background:linear-gradient(45deg,#F58529,#DD2A7B,#8134AF)}
-.chan .u{flex:1;min-width:0}
+.chan .u{flex:1 1 130px;min-width:0}
 .chan .u b{font-size:13px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chan .u span{font-size:11px;color:var(--muted)}
-.chan .st{font-size:10.5px;font-weight:700;border-radius:99px;padding:3px 9px;white-space:nowrap}
+.chan .u span{font-size:11px;color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chan .st{font-size:10.5px;font-weight:700;border-radius:99px;padding:3px 9px;white-space:nowrap;margin-left:auto}
+.chan-acts{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px}
+.chan-acts .btn-sm{flex:0 0 auto;padding:7px 12px;font-size:12px}
 .st-ok{background:#E8F7EE;color:var(--green)}.st-wait{background:#FFF6E5;color:#B45309}.st-flag{background:#FDECEC;color:var(--red)}
 .btn{background:var(--orange);color:#fff;font-weight:700;font-size:13.5px;border-radius:11px;padding:12px 18px;width:100%;transition:.15s}
 .btn:hover{filter:brightness(1.06)}
