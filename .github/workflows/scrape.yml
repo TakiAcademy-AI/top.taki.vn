@@ -1,0 +1,21 @@
+name: Quét dữ liệu mỗi 30 phút
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # mỗi 30 phút (giờ UTC; GitHub có thể trễ 5-15p)
+  workflow_dispatch: {}        # cho phép bấm chạy tay
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Quét kênh + tính điểm (gọi thẳng server production, bỏ Cloudflare)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          HOST_IP: "51.79.229.121"
+        run: |
+          set -e
+          echo "== Quét =="
+          curl -sk --resolve top.taki.vn:443:$HOST_IP --max-time 280 \
+            "https://top.taki.vn/api/cron/daily-scrape?secret=$CRON_SECRET" || echo "scrape timeout (server vẫn chạy nền)"
+          echo "== Tính điểm =="
+          curl -sk --resolve top.taki.vn:443:$HOST_IP --max-time 120 \
+            "https://top.taki.vn/api/cron/daily-scoring?secret=$CRON_SECRET" || echo "scoring lỗi"
