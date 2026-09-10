@@ -745,7 +745,7 @@ export default function AdminPage() {
                 </table>
               </div>
               <p className="mini-note" style={{ marginTop: 10 }}>
-                Lịch tự động: quét 05:30 · tính điểm 06:00 giờ VN. Quét trực tiếp từ máy chủ, không tốn phí dịch vụ ngoài.
+                Lịch tự động: quét & tính điểm mỗi 30 phút. Quét trực tiếp từ máy chủ, không tốn phí dịch vụ ngoài.
               </p>
             </div>
 

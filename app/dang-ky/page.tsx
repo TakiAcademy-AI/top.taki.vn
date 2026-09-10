@@ -143,7 +143,7 @@ export default function RegisterPage() {
           <h1>{campaign ? campaign.name : "Sắp có đường đua mới"}</h1>
           <p>
             {campaign?.class_names?.length ? `Lớp ${campaign.class_names.join(", ")} · ` : ""}
-            Đăng ký kênh của bạn để vào đường đua. Điểm được tính tự động mỗi ngày từ dữ liệu kênh thật.
+            Đăng ký kênh của bạn để vào đường đua. Điểm được tính tự động, cập nhật mỗi 30 phút từ dữ liệu kênh thật.
             {campaign?.prize ? ` Giải thưởng: ${campaign.prize}.` : ""}
           </p>
           {campaign && (
@@ -256,7 +256,7 @@ export default function RegisterPage() {
                 <div>{rows.slice(3, 10).map((r) => <Lane key={r.student_id} row={r} max={max} onClick={() => setProfileId(r.public_id)} />)}</div>
               </>
             ) : (
-              <p className="mini-note">Chưa có dữ liệu xếp hạng. Điểm cập nhật 6:00 sáng mỗi ngày.</p>
+              <p className="mini-note">Chưa có dữ liệu xếp hạng. Điểm cập nhật tự động mỗi 30 phút.</p>
             )}
           </div>
         </div>

@@ -72,7 +72,7 @@ export default function HomePage() {
         <div className="hero">
           <span className="tag">CỔNG ĐUA TOÀN HỆ THỐNG</span>
           <h1>Học viên TAKI đang xây kênh thật, số liệu thật, đua thật</h1>
-          <p>Điểm tính tự động 06:00 mỗi sáng từ dữ liệu kênh thật của từng học viên. Không tự khai, không chấm tay.</p>
+          <p>Điểm tính tự động, cập nhật mỗi 30 phút từ dữ liệu kênh thật của từng học viên. Không tự khai, không chấm tay.</p>
           <div className="meta">
             <div><b>{data ? fmt(data.stats.students) : "…"}</b><span>học viên đang đua</span></div>
             <div><b>{data ? fmt(data.stats.channels) : "…"}</b><span>kênh đang theo dõi</span></div>
@@ -179,7 +179,7 @@ export default function HomePage() {
 
           <div className="card">
             <div className="sec-head" style={{ marginBottom: 6 }}><h2>⚡ Chiến tích mới</h2><span>tự sinh từ dữ liệu quét</span></div>
-            {data && !data.feed.length && <p className="mini-note">Chưa có chiến tích nào — feed này tự chạy khi hệ thống bắt đầu quét kênh hàng ngày.</p>}
+            {data && !data.feed.length && <p className="mini-note">Chưa có chiến tích nào — feed này tự chạy khi hệ thống bắt đầu quét kênh định kỳ.</p>}
             {(data?.feed ?? []).map((f, i) => (
               <div className="feed-item" key={i}>
                 <div className="ic">{f.icon}</div>
@@ -228,7 +228,7 @@ export default function HomePage() {
         <div className="guest">
           <div>
             <b>Bạn chưa phải học viên TAKI?</b>
-            <span>Toàn bộ số liệu trên trang này là kết quả thực hành thật của học viên sau khóa học, quét tự động từ kênh thật mỗi ngày.</span>
+            <span>Toàn bộ số liệu trên trang này là kết quả thực hành thật của học viên sau khóa học, quét tự động từ kênh thật, cập nhật mỗi 30 phút.</span>
           </div>
           <a className="btn btn-link" style={{ width: "auto" }} href="https://taki.vn" target="_blank" rel="noopener">
             Tìm hiểu khóa học tại taki.vn

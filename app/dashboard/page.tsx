@@ -216,7 +216,7 @@ export default function DashboardPage() {
                     )}
                     <p className="mini-note">
                       Cách xác minh: chèn mã <b>{me.student.public_id}</b> vào bio/mô tả kênh, rồi bấm{" "}
-                      <b>“Xác minh ngay”</b> (hoặc chờ hệ thống tự quét lúc 5:30 sáng).
+                      <b>“Xác minh ngay”</b> (hoặc chờ hệ thống tự quét — cứ 30 phút một lần).
                     </p>
                   </div>
                 );
@@ -261,8 +261,8 @@ export default function DashboardPage() {
               <p className="mini-note">Chưa có điểm — bảng xếp hạng xuất hiện sau chu kỳ tính điểm đầu tiên.</p>
             )}
             <p className="mini-note" style={{ marginTop: 12 }}>
-              Điểm cập nhật 6:00 sáng mỗi ngày từ dữ liệu kênh thật.
-              {part?.updated_on ? ` Cập nhật gần nhất: 06:00 ngày ${part.updated_on.split("-").reverse().join("/")}.` : ""}
+              Điểm cập nhật tự động mỗi 30 phút từ dữ liệu kênh thật.
+              {part?.updated_on ? ` Cập nhật gần nhất: ngày ${part.updated_on.split("-").reverse().join("/")}.` : ""}
               {" "}Bấm vào từng học viên để xem hồ sơ kênh.
             </p>
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>

@@ -53,7 +53,7 @@ export function AppShell({ active, children }: { active: "home" | "race" | "dash
           {item("hoc-tap", "https://edu.nguyentatkiem.com/", "🎓", "Học tập", true)}
         </nav>
         <div className="sb-note">
-          Số liệu quét tự động mỗi ngày lúc 05:30 · điểm chốt 06:00
+          Số liệu quét & tính điểm tự động mỗi 30 phút
         </div>
       </aside>
       <main className="shell-main">{children}</main>
