@@ -172,8 +172,8 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
   };
 
   // Page: "{likes} likes · {talking} talking about this. {bio}"
-  const likes = desc.match(/([\d.,]+\s*[KkMm]?)\s*(?:likes|lượt thích)/i);
-  const followersDesc = desc.match(/([\d.,]+\s*[KkMm]?)\s*(?:followers|người theo dõi)/i);
+  const likes = desc.match(/([\d.,]+\s*[KkMm]?)\s*(?:likes?|lượt thích)/i);
+  const followersDesc = desc.match(/([\d.,]+\s*[KkMm]?)\s*(?:followers?|người theo dõi)/i);
   const talking = desc.match(/([\d.,]+\s*[KkMm]?)\s*(?:talking about this|người đang nói)/i);
   const toNum = (m: RegExpMatchArray | null) => (m ? parseCount(m[1]) : null);
 
@@ -187,7 +187,7 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
 
   // bio = phần sau mệnh đề số liệu cuối cùng (…likes · …followers · …talking about this.)
   let bio = desc;
-  const metrics = [...desc.matchAll(/[\d.,]+\s*(?:likes|lượt thích|followers|người theo dõi|talking about this|người đang nói)/gi)];
+  const metrics = [...desc.matchAll(/[\d.,]+\s*(?:likes?|lượt thích|followers?|người theo dõi|talking about this|người đang nói)/gi)];
   if (metrics.length) {
     const last = metrics[metrics.length - 1];
     bio = desc.slice(last.index! + last[0].length).replace(/^[·.\s]+/, "");
