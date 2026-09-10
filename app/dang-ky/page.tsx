@@ -26,6 +26,8 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [classId, setClassId] = useState("");
   const [chans, setChans] = useState<ChanInput[]>([{ platform: "tiktok", url: "" }]);
+  // Kết quả giải mã link theo từng dòng kênh: giúp học viên phát hiện dán nhầm link người khác
+  const [checks, setChecks] = useState<Record<number, { loading?: boolean; name?: string | null; username?: string; taken?: boolean; taken_by?: string | null; error?: string }>>({});
   const [platforms, setPlatforms] = useState<{ value: string; label: string }[]>([]);
   const [busy, setBusy] = useState(false);
   // Luồng OTP khi SĐT đã tồn tại
@@ -59,6 +61,25 @@ export default function RegisterPage() {
       else if (d.classes?.length) setClassId(d.classes[0].id);
     }).catch(() => {});
   }, [router]);
+
+  // Giải mã 1 dòng kênh khi học viên rời ô input (hoặc dán xong)
+  async function checkChan(i: number) {
+    const c = chans[i];
+    if (!c?.url?.trim()) { setChecks((p) => ({ ...p, [i]: {} })); return; }
+    setChecks((p) => ({ ...p, [i]: { loading: true } }));
+    try {
+      const res = await fetch("/api/resolve-channel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: c.platform, url: c.url }),
+      });
+      const d = await res.json();
+      if (!d.ok) { setChecks((p) => ({ ...p, [i]: { error: d.error } })); return; }
+      setChecks((p) => ({ ...p, [i]: { name: d.name, username: d.username, taken: d.taken, taken_by: d.taken_by } }));
+    } catch {
+      setChecks((p) => ({ ...p, [i]: {} }));
+    }
+  }
 
   async function doRegister() {
     if (busy) return;
@@ -164,18 +185,41 @@ export default function RegisterPage() {
             </div>
             <div className="field">
               <label>Kênh tham gia đua</label>
-              {chans.map((c, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, marginBottom: 8 }}>
-                  <select value={c.platform} onChange={(e) => setChans(chans.map((x, j) => (j === i ? { ...x, platform: e.target.value } : x)))}>
-                    {platforms.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-                  </select>
-                  <input
-                    value={c.url}
-                    onChange={(e) => setChans(chans.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))}
-                    placeholder="Dán link kênh, ví dụ tiktok.com/@kenhcuaban"
-                  />
+              {chans.map((c, i) => {
+                const ck = checks[i] ?? {};
+                return (
+                <div key={i} style={{ marginBottom: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: chans.length > 1 ? "120px 1fr 32px" : "120px 1fr", gap: 8 }}>
+                    <select value={c.platform} onChange={(e) => { setChans(chans.map((x, j) => (j === i ? { ...x, platform: e.target.value } : x))); setChecks((p) => ({ ...p, [i]: {} })); }}>
+                      {platforms.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                    <input
+                      value={c.url}
+                      onChange={(e) => { setChans(chans.map((x, j) => (j === i ? { ...x, url: e.target.value } : x))); if (checks[i]) setChecks((p) => ({ ...p, [i]: {} })); }}
+                      onBlur={() => checkChan(i)}
+                      placeholder="Dán link kênh, ví dụ tiktok.com/@kenhcuaban"
+                    />
+                    {chans.length > 1 && (
+                      <button className="btn-ghost btn-sm" title="Bỏ kênh này" style={{ padding: "0 8px" }}
+                        onClick={() => { setChans(chans.filter((_, j) => j !== i)); setChecks({}); }}>✕</button>
+                    )}
+                  </div>
+                  {ck.loading && <div className="mini-note" style={{ marginTop: 4 }}>Đang kiểm tra kênh…</div>}
+                  {ck.error && <div className="mini-note" style={{ marginTop: 4, color: "#E5484D" }}>⚠️ {ck.error}</div>}
+                  {!ck.loading && !ck.error && (ck.name || ck.username) && (
+                    ck.taken ? (
+                      <div className="mini-note" style={{ marginTop: 4, color: "#E5484D", fontWeight: 600 }}>
+                        ⚠️ Kênh <b>{ck.name || `@${ck.username}`}</b> đã có người đăng ký{ck.taken_by ? ` (${ck.taken_by})` : ""}.
+                        {" "}Nếu đây KHÔNG phải kênh của bạn thì bạn đã dán nhầm link — hãy mở kênh <b>của chính bạn</b>, copy lại link rồi dán vào.
+                      </div>
+                    ) : (
+                      <div className="mini-note" style={{ marginTop: 4, color: "#12A150", fontWeight: 600 }}>
+                        ✓ Kênh: <b>{ck.name || `@${ck.username}`}</b>. Đúng kênh của bạn thì để nguyên nhé.
+                      </div>
+                    )
+                  )}
                 </div>
-              ))}
+              );})}
               <button className="btn-ghost btn-sm" onClick={() => setChans([...chans, { platform: platforms[0]?.value ?? "tiktok", url: "" }])}>
                 + Thêm kênh
               </button>
