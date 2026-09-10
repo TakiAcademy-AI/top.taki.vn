@@ -40,6 +40,24 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+// Proxy quét: ưu tiên env SCRAPE_PROXY; nếu không có thì đọc từ DB (app_settings.scrape_proxy).
+// Cho phép bật/đổi/tắt proxy mà KHÔNG cần sửa env server (chỉ cần đổi 1 dòng trong DB). Cache 5 phút.
+let _proxyCache: { val: string | undefined; at: number } | null = null;
+async function getScrapeProxy(): Promise<string | undefined> {
+  if (process.env.SCRAPE_PROXY) return process.env.SCRAPE_PROXY;
+  const now = Date.now();
+  if (_proxyCache && now - _proxyCache.at < 300_000) return _proxyCache.val;
+  let val: string | undefined;
+  try {
+    const { data } = await supabaseAdmin().from("app_settings").select("value").eq("key", "scrape_proxy").maybeSingle();
+    val = (data?.value ?? "").trim() || undefined;
+  } catch {
+    val = _proxyCache?.val; // lỗi DB: giữ giá trị cache cũ nếu có
+  }
+  _proxyCache = { val, at: now };
+  return val;
+}
+
 const BROWSER_HEADERS: Record<string, string> = {
   "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -59,7 +77,7 @@ export async function scrapeTikTokProfile(username: string): Promise<NormalizedP
   const impersonate = path.join(process.cwd(), "bin", "curl_chrome131");
   const useImpersonate = fs.existsSync(impersonate);
   const bin = useImpersonate ? impersonate : "curl";
-  const proxy = process.env.SCRAPE_PROXY;
+  const proxy = await getScrapeProxy();
   const args = [
     "-sL",
     "--compressed",
@@ -131,7 +149,7 @@ function decodeEntities(s: string): string {
 }
 
 export async function scrapeFacebookPage(username: string): Promise<NormalizedProfile | null> {
-  const proxy = process.env.SCRAPE_PROXY;
+  const proxy = await getScrapeProxy();
   const impersonate = path.join(process.cwd(), "bin", "curl_chrome131");
   const bin = fs.existsSync(impersonate) ? impersonate : "curl";
   const url = /^\d+$/.test(username)
