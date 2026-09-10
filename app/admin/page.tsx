@@ -786,7 +786,7 @@ export default function AdminPage() {
       </div>
 
       {addChan && (
-        <div className="modal-bg" onClick={() => setAddChan(null)}>
+        <div className="modal-bg" style={{ zIndex: 95 }} onClick={() => setAddChan(null)}>
           <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 4 }}>➕ Thêm kênh cho học viên</h3>
             <p className="mini-note" style={{ marginBottom: 14 }}>{profile?.student?.full_name} · {profile?.student?.public_id}</p>
