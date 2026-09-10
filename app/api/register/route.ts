@@ -44,6 +44,20 @@ export async function POST(req: NextRequest) {
     return jsonError("Số điện thoại đã đăng ký. Vui lòng đăng nhập bằng OTP.", 409, { phone_exists: true });
   }
 
+  // Báo RÕ kênh nào đã có người đăng ký (thay vì "một kênh" chung chung)
+  const PF_LABEL: Record<string, string> = { tiktok: "TikTok", youtube: "YouTube", facebook: "Facebook", instagram: "Instagram" };
+  const unames = normalized.map((c) => c.username);
+  if (unames.length) {
+    const { data: existing } = await db.from("channels").select("platform, username, status").in("username", unames);
+    const dupes = normalized.filter((n) =>
+      (existing ?? []).some((e) => e.platform === n.platform && e.username === n.username && e.status !== "removed")
+    );
+    if (dupes.length) {
+      const list = dupes.map((d) => `${PF_LABEL[d.platform] ?? d.platform} @${d.username}`).join(", ");
+      return jsonError(`Kênh đã có người khác đăng ký: ${list}. Vui lòng bỏ kênh này (bấm ✕) rồi đăng ký lại — các kênh còn lại vẫn dùng được.`);
+    }
+  }
+
   const { data: publicId, error: idErr } = await db.rpc("next_public_id");
   if (idErr || !publicId) return jsonError("Không sinh được ID, thử lại sau", 500);
 
