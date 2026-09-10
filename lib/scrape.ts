@@ -251,14 +251,33 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
     }
   }
 
+  // Chống nhiễu IP: Facebook hay bóp số về 0/trống với IP máy chủ dù kênh có follower thật.
+  // Nếu lần này đọc 0/null nhưng kênh ĐÃ từng đọc được số > 0 -> giữ số tốt gần nhất, tránh nhảy điểm.
+  let followersOut = prof.followers;
+  let engagementOut = prof.engagement;
+  if (followersOut == null || followersOut === 0) {
+    const { data: lastGood } = await db
+      .from("channel_snapshots")
+      .select("followers, engagement")
+      .eq("channel_id", ch.id)
+      .gt("followers", 0)
+      .order("snapshot_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lastGood?.followers) {
+      followersOut = lastGood.followers;
+      if (engagementOut == null) engagementOut = lastGood.engagement ?? null;
+    }
+  }
+
   const { error } = await db.from("channel_snapshots").upsert(
     {
       channel_id: ch.id,
       snapshot_date: date,
-      followers: prof.followers,
+      followers: followersOut,
       total_views: prof.totalViews,
       videos_count: prof.videosCount,
-      engagement: prof.engagement,
+      engagement: engagementOut,
       raw: prof.raw,
       scrape_status: "ok",
     },
