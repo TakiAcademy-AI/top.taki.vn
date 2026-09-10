@@ -59,7 +59,7 @@ export default function HomePage() {
               <a className="cta" href="/dashboard">Vào dashboard</a>
             ) : (
               <>
-                <a href="/dang-ky">Đăng nhập</a>
+                <a href="/dang-nhap">Đăng nhập</a>
                 <a className="cta" href="/dang-ky">Vào đường đua</a>
               </>
             )}
