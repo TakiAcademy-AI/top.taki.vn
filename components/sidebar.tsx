@@ -47,7 +47,7 @@ export function AppShell({ active, children }: { active: "home" | "race" | "dash
               ))
             : item("race", "/", "🏆", "Bảng xếp hạng")}
           <div className="sb-group">Cá nhân</div>
-          {item("dashboard", loggedIn ? "/dashboard" : "/dang-ky", "👤", loggedIn ? "Dashboard của tôi" : "Đăng nhập")}
+          {item("dashboard", loggedIn ? "/dashboard" : "/dang-nhap", "👤", loggedIn ? "Dashboard của tôi" : "Đăng nhập")}
           {item("register", "/dang-ky", "📝", "Đăng ký kênh")}
           <div className="sb-group">TAKI Academy</div>
           {item("hoc-tap", "https://edu.nguyentatkiem.com/", "🎓", "Học tập", true)}
