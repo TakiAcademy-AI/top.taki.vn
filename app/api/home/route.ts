@@ -59,15 +59,16 @@ async function buildHome() {
   const studentName = new Map<string, { name: string; public_id: string }>();
   for (const p of parts) studentName.set(p.student_id, { name: p.students.full_name, public_id: p.students.public_id });
 
-  // ===== Số toàn hệ thống: follower/view tăng 7 ngày từ snapshots kênh verified =====
+  // ===== Số toàn hệ thống: TỔNG follower + TỔNG tương tác hiện tại (snapshot mới nhất mỗi kênh verified).
+  // (Mô hình tính toàn bộ follower + hệ thống còn mới nên hiển thị tổng hiện có, không dùng "tăng 7 ngày".) =====
   const verifiedIds = (channels ?? []).filter((c) => c.status === "verified").map((c) => c.id);
-  let followers7 = 0;
-  let views7 = 0;
+  let totalFollowers = 0;
+  let totalEngagement = 0;
   const snapByCh = new Map<string, Map<string, any>>();
   if (verifiedIds.length) {
     const { data: snaps } = await db
       .from("channel_snapshots")
-      .select("channel_id, snapshot_date, followers, total_views")
+      .select("channel_id, snapshot_date, followers, total_views, engagement")
       .in("channel_id", verifiedIds)
       .in("snapshot_date", [today, yesterday, weekAgo]);
     for (const s of snaps ?? []) {
@@ -76,10 +77,9 @@ async function buildHome() {
     }
     for (const [, byDate] of snapByCh) {
       const now = byDate.get(today) ?? byDate.get(yesterday);
-      const old = byDate.get(weekAgo);
-      if (now && old) {
-        followers7 += Math.max(0, (now.followers ?? 0) - (old.followers ?? 0));
-        views7 += Math.max(0, Number(now.total_views ?? 0) - Number(old.total_views ?? 0));
+      if (now) {
+        totalFollowers += Number(now.followers ?? 0);
+        totalEngagement += Number(now.engagement ?? 0);
       }
     }
   }
@@ -213,8 +213,8 @@ async function buildHome() {
     stats: {
       students: distinctStudents.size,
       channels: (channels ?? []).length,
-      followers7,
-      views7,
+      followers: totalFollowers,
+      engagement: totalEngagement,
     },
     campaigns,
     class_board,

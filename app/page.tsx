@@ -15,7 +15,7 @@ type HomeCampaign = {
 
 type HomeData = {
   today: string;
-  stats: { students: number; channels: number; followers7: number; views7: number };
+  stats: { students: number; channels: number; followers: number; engagement: number };
   campaigns: HomeCampaign[];
   class_board: { class_id: string; name: string; code: string | null; students: number; channels: number; avg_score: number }[];
   feed: { icon: string; text: string; when: string }[];
@@ -86,8 +86,8 @@ export default function HomePage() {
           <div className="meta">
             <div><b>{data ? fmt(data.stats.students) : "…"}</b><span>học viên đang đua</span></div>
             <div><b>{data ? fmt(data.stats.channels) : "…"}</b><span>kênh đang theo dõi</span></div>
-            <div><b><em>+{data ? fmtCompact(data.stats.followers7) : "…"}</em></b><span>follower cả hệ thống tăng 7 ngày</span></div>
-            <div><b>{data ? fmtCompact(data.stats.views7) : "…"}</b><span>lượt xem 7 ngày</span></div>
+            <div><b>{data ? fmtCompact(data.stats.followers) : "…"}</b><span>tổng follower cả hệ thống</span></div>
+            <div><b>{data ? fmtCompact(data.stats.engagement) : "…"}</b><span>tổng lượt tương tác</span></div>
           </div>
           <div className="btns">
             <a className="btn btn-link" style={{ width: "auto" }} href={loggedIn ? "/dashboard" : "/dang-ky"}>
