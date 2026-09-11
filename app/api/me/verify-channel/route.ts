@@ -85,8 +85,9 @@ export async function POST(req: NextRequest) {
         status: "verified",
         verified_at: new Date().toISOString(),
         verified_by: "self",
-        baseline_followers: prof.followers,
-        baseline_views: prof.totalViews,
+        // Tính TOÀN BỘ follower hiện có -> mốc khởi điểm = 0
+        baseline_followers: 0,
+        baseline_views: 0,
       })
       .eq("id", ch.id);
     await db.from("audit_logs").insert({

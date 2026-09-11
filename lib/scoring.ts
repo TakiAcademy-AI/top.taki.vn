@@ -104,10 +104,10 @@ export async function runDailyScoring(date: string): Promise<ScoringReport> {
         report.scrapeFailed.push(`${ch.platform}:@${ch.username}`);
         continue; // kênh lỗi quét: giữ điểm hôm qua, không chặn kênh khác
       }
-      // Mốc so sánh (prev): dùng snapshot HÔM QUA — NHƯNG chỉ khi hôm qua kênh ĐÃ xác minh.
-      // Nếu hôm qua kênh còn 'pending' (chưa xác minh), snapshot đó là dữ liệu TRƯỚC khi vào đua,
-      // KHÔNG được tính -> quay về baseline (số chốt tại thời điểm xác minh). Đảm bảo tăng trưởng
-      // trong thời gian pending / follower có sẵn không bao giờ thành điểm.
+      // Mốc so sánh (prev): dùng snapshot HÔM QUA khi hôm qua kênh ĐÃ xác minh; nếu không thì
+      // quay về baseline. Mô hình hiện tại: baseline = 0 (chốt lúc xác minh) -> ngày đầu tính TOÀN BỘ
+      // follower hiện có thành điểm, các ngày sau cộng thêm phần tăng trưởng. Cộng dồn = tổng follower
+      // hiện tại. Kênh cũ có sẵn follower khi vào đua cũng được tính hết.
       const prevDay = addDays(date, -1);
       const verifiedDay = ch.verified_at
         ? new Date(new Date(ch.verified_at).getTime() + 7 * 3_600_000).toISOString().slice(0, 10)

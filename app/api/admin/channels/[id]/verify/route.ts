@@ -13,11 +13,11 @@ const SCRAPERS: Record<string, (u: string) => Promise<any>> = {
 };
 
 /**
- * Xác minh tay một kênh. Baseline (mốc xuất phát) lấy theo thứ tự ưu tiên:
- *  1) Số liệu quét TRỰC TIẾP ngay lúc bấm — chuẩn nhất, admin khỏi đoán số
- *  2) Snapshot mới nhất đã có trong DB
- *  3) Số admin nhập tay (nếu quét lỗi và không có snapshot)
- * Luôn ghi log ai duyệt, lúc nào, baseline lấy từ nguồn nào.
+ * Xác minh tay một kênh. Mô hình điểm: tính TOÀN BỘ follower hiện có -> mốc khởi điểm (baseline) = 0
+ * (kênh cũ đã có sẵn follower khi vào đua cũng được tính hết thành điểm).
+ * Vẫn quét 1 lần để lưu snapshot + xác nhận đọc được kênh, nhưng KHÔNG bắt buộc quét thành công:
+ * admin luôn duyệt được (kể cả FB cá nhân giấu follower) vì baseline không phụ thuộc số quét.
+ * Admin có thể ép baseline khác 0 trong trường hợp đặc biệt qua body.baseline_followers.
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = requireAdmin();
@@ -29,20 +29,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!ch) return jsonError("Không tìm thấy kênh", 404);
   if (ch.status === "removed") return jsonError("Kênh đã bị gỡ");
 
-  let baselineFollowers: number | null = null;
-  let baselineViews: number | null = null;
-  let source = "";
-
-  // 1) Quét trực tiếp ngay để lấy số thật
+  // Quét best-effort để lưu snapshot hôm nay (không bắt buộc thành công)
+  let scraped = false;
   const scraper = SCRAPERS[ch.platform];
   if (scraper) {
     try {
       const prof = await scraper(ch.username);
       if (prof && prof.followers != null) {
-        baselineFollowers = prof.followers;
-        baselineViews = prof.totalViews;
-        source = "quét trực tiếp";
-        // lưu luôn snapshot hôm nay để không phải quét lại
+        scraped = true;
         await db.from("channel_snapshots").upsert(
           {
             channel_id: ch.id, snapshot_date: todayVN(),
@@ -54,40 +48,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         );
       }
     } catch {
-      /* quét lỗi -> rơi xuống fallback */
+      /* quét lỗi -> vẫn xác minh với baseline 0 */
     }
   }
 
-  // 2) Snapshot mới nhất đã có
-  if (baselineFollowers === null) {
-    const { data: snap } = await db
-      .from("channel_snapshots")
-      .select("followers, total_views")
-      .eq("channel_id", ch.id)
-      .eq("scrape_status", "ok")
-      .order("snapshot_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (snap?.followers != null) {
-      baselineFollowers = snap.followers;
-      baselineViews = snap.total_views != null ? Number(snap.total_views) : null;
-      source = "snapshot gần nhất";
-    }
-  }
-
-  // 3) Số admin nhập tay (chốt chặn cuối)
-  if (baselineFollowers === null) {
-    if (body?.baseline_followers != null) {
-      baselineFollowers = Number(body.baseline_followers);
-      baselineViews = body?.baseline_views != null ? Number(body.baseline_views) : (ch.baseline_views ?? 0);
-      source = "admin nhập tay";
-    } else {
-      return jsonError(
-        "Chưa quét được số liệu kênh này (trang có thể bắt đăng nhập hoặc sai link). " +
-        "Kiểm tra lại link kênh, hoặc nhập baseline follower thủ công để xác minh."
-      );
-    }
-  }
+  // Mặc định baseline = 0 (tính full follower). Admin có thể ép số khác nếu cần.
+  const baselineFollowers = body?.baseline_followers != null ? Number(body.baseline_followers) : 0;
+  const baselineViews = body?.baseline_views != null ? Number(body.baseline_views) : 0;
 
   const { error } = await db
     .from("channels")
@@ -96,14 +63,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       verified_at: new Date().toISOString(),
       verified_by: "admin",
       baseline_followers: baselineFollowers,
-      baseline_views: baselineViews ?? 0,
+      baseline_views: baselineViews,
     })
     .eq("id", ch.id);
   if (error) return jsonError("Không cập nhật được", 500);
 
   await db.from("audit_logs").insert({
     actor_id: "admin", action: "verify_channel_manual", target_type: "channel", target_id: ch.id,
-    detail: { previous_status: ch.status, baseline_followers: baselineFollowers, baseline_views: baselineViews, source },
+    detail: { previous_status: ch.status, baseline_followers: baselineFollowers, scraped },
   });
-  return NextResponse.json({ ok: true, baseline_followers: baselineFollowers, source });
+  return NextResponse.json({ ok: true, baseline_followers: baselineFollowers, scraped });
 }

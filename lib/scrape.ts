@@ -254,8 +254,10 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
           status: "verified",
           verified_at: new Date().toISOString(),
           verified_by: "system",
-          baseline_followers: prof.followers,
-          baseline_views: prof.totalViews,
+          // Mô hình điểm: tính TOÀN BỘ follower hiện có -> mốc khởi điểm = 0
+          // (kênh cũ đã có sẵn follower khi vào đua cũng được tính hết thành điểm).
+          baseline_followers: 0,
+          baseline_views: 0,
         })
         .eq("id", ch.id);
       await db.from("audit_logs").insert({
