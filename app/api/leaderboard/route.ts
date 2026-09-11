@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { jsonError } from "@/lib/api";
 import { cached } from "@/lib/cache";
+import { todayVN } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,9 @@ async function buildLeaderboard(campaignId: string, detail: boolean) {
         : Promise.resolve({ data: [] as any[] }),
     ]);
     const entries = entriesRes.data;
+    // "Điểm hôm nay" = điểm phát sinh ĐÚNG ngày hôm nay (không phải "ngày mới nhất có điểm").
+    // Tránh trường hợp điểm nền dồn 1 ngày -> hôm nay = tổng.
+    const today = todayVN();
     for (const e of entries ?? []) {
       if (!lastEntryDate || e.entry_date > lastEntryDate) lastEntryDate = e.entry_date;
     }
@@ -62,7 +66,7 @@ async function buildLeaderboard(campaignId: string, detail: boolean) {
       if (!breakdownByStudent.has(e.student_id)) breakdownByStudent.set(e.student_id, {});
       const b = breakdownByStudent.get(e.student_id)!;
       b[e.metric] = (b[e.metric] ?? 0) + Number(e.points);
-      if (e.entry_date === lastEntryDate) {
+      if (e.entry_date === today) {
         todayByStudent.set(e.student_id, (todayByStudent.get(e.student_id) ?? 0) + Number(e.points));
       }
     }
