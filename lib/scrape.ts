@@ -148,8 +148,52 @@ function decodeEntities(s: string): string {
     .replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 }
 
+// Parse số rút gọn kiểu "2.5K" / "1.2M" / "11,712" -> số nguyên
+function parseCompact(s: string | undefined | null): number | null {
+  if (!s) return null;
+  const m = String(s).trim().match(/^([\d.,]+)\s*([KkMm])?$/);
+  if (!m) return null;
+  let n = parseFloat(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(n)) return null;
+  const suf = (m[2] || "").toLowerCase();
+  if (suf === "k") n *= 1000;
+  else if (suf === "m") n *= 1_000_000;
+  return Math.round(n);
+}
+
+/**
+ * Quét tab Reels của một page Facebook: đếm số reel + cộng view.
+ * FB nhúng sẵn "play_count_reduced":"2.5K" cho mỗi reel trong HTML (SSR) -> curl đọc được, không cần JS.
+ * Lưu ý: chỉ lấy được lô reel render sẵn ban đầu (~8-12 reel mới nhất với kênh nhiều bài); view là số rút gọn.
+ */
+export async function scrapeFacebookReels(username: string, proxy?: string): Promise<{ totalViews: number; videoCount: number } | null> {
+  const impersonate = path.join(process.cwd(), "bin", "curl_chrome131");
+  const bin = fs.existsSync(impersonate) ? impersonate : "curl";
+  const url = /^\d+$/.test(username)
+    ? `https://www.facebook.com/profile.php?id=${username}&sk=reels_tab`
+    : `https://www.facebook.com/${encodeURIComponent(username)}/reels`;
+  const args = ["-sL", "--compressed", "--max-time", "40", "-H", "Accept-Language: en-US,en;q=0.9",
+    ...(proxy ? ["-x", proxy] : []), url];
+  let html: string;
+  try {
+    const { stdout } = await pexec(bin, args, { timeout: 50_000, maxBuffer: 30 * 1024 * 1024 });
+    html = stdout;
+  } catch {
+    return null;
+  }
+  const views: number[] = [];
+  for (const m of html.matchAll(/"play_count_reduced":"([^"]+)"/g)) {
+    const v = parseCompact(m[1]);
+    if (v != null) views.push(v);
+  }
+  if (!views.length) return { totalViews: 0, videoCount: 0 };
+  return { totalViews: views.reduce((s, v) => s + v, 0), videoCount: views.length };
+}
+
 export async function scrapeFacebookPage(username: string): Promise<NormalizedProfile | null> {
   const proxy = await getScrapeProxy();
+  // Quét tab Reels SONG SONG với trang chính (không phụ thuộc nhau) -> khỏi chậm gấp đôi.
+  const reelsPromise = scrapeFacebookReels(username, proxy).catch(() => null);
   const impersonate = path.join(process.cwd(), "bin", "curl_chrome131");
   const bin = fs.existsSync(impersonate) ? impersonate : "curl";
   const url = /^\d+$/.test(username)
@@ -215,15 +259,21 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
 
   if (followers == null && !bio) throw new Error("og:description không parse được số liệu");
 
+  // Kết quả reels (đã chạy song song ở trên). Lỗi reels KHÔNG chặn việc lấy follower.
+  const reels = await reelsPromise;
+  const totalViews: number | null = reels ? reels.totalViews : null;
+  const videosCount: number | null = reels ? reels.videoCount : null;
+
   return {
     ref: username.toLowerCase(),
     followers,
-    totalViews: null,
-    videosCount: null,
+    totalViews,
+    videosCount,
     engagement: toNum(talking),
     bio,
     raw: {
       engine: "facebook-curl", name, likes: toNum(likes), talking: toNum(talking),
+      reels_views: totalViews, reels_count: videosCount,
       // debug khi không đọc được follower — soi VPS nhận HTML gì
       ...(followers == null
         ? { dbg_len: htmlText.length, dbg_has_follow: htmlText.includes("follower") || htmlText.includes("theo dõi"),
