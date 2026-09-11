@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ProfileModal, SiteHeader, initials } from "@/components/ui";
 import { AppShell } from "@/components/sidebar";
+import { LeaderboardBoard } from "@/components/leaderboard";
 
 type HomeCampaign = {
   id: string; name: string; prize: string | null; prizes: { label: string; reward: string }[]; scope: string; status: string;
@@ -41,11 +42,20 @@ export default function HomePage() {
   const [data, setData] = useState<HomeData | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [boardId, setBoardId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/home").then((r) => r.json()).then(setData).catch(() => {});
     fetch("/api/me").then((r) => setLoggedIn(r.ok)).catch(() => {});
   }, []);
+
+  // Chọn chiến dịch để hiện BXH chi tiết: ưu tiên chiến dịch đang chạy, mặc định cái đầu tiên
+  useEffect(() => {
+    if (data && !boardId && data.campaigns.length) {
+      const pick = data.campaigns.find((c) => c.status === "running") ?? data.campaigns[0];
+      setBoardId(pick.id);
+    }
+  }, [data, boardId]);
 
   const maxAvg = data?.class_board[0]?.avg_score || 1;
 
@@ -155,6 +165,31 @@ export default function HomePage() {
             })}
           </div>
         </div>
+
+        {/* 2b. Bảng xếp hạng chi tiết ngay tại trang chủ */}
+        {(data?.campaigns.length ?? 0) > 0 && boardId && (
+          <div className="sec">
+            <div className="sec-head">
+              <h2>📊 Bảng xếp hạng chi tiết</h2>
+              <span>toàn bộ học viên · bấm vào hàng để xem danh sách kênh</span>
+            </div>
+            {data!.campaigns.length > 1 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                {data!.campaigns.map((c) => (
+                  <button
+                    key={c.id}
+                    className="btn-ghost btn-sm"
+                    onClick={() => setBoardId(c.id)}
+                    style={c.id === boardId ? { borderColor: "var(--orange)", color: "var(--orange)", fontWeight: 800 } : undefined}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <LeaderboardBoard campaignId={boardId} onOpenProfile={setProfileId} />
+          </div>
+        )}
 
         {/* 3. Bảng vàng lớp + Feed chiến tích */}
         <div className="sec grid g2h">
