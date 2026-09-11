@@ -131,10 +131,11 @@ export default function DashboardPage() {
   const max = rows[0]?.total_score ?? 0;
   const myRow = rows.find((r) => r.public_id === me.student.public_id);
   const others = rows.filter((r) => r.public_id !== me.student.public_id).slice(0, 9);
-  const fTrend = pctLabel(me.stats.followers7, me.stats.followers7prev);
-  const vTrend = pctLabel(me.stats.views7, me.stats.views7prev);
-  const quota = part?.weekly_quota ?? 0;
-  const vidLack = quota > 0 && me.stats.videos7 < quota;
+  // Tổng số hiện tại từ snapshot mới nhất của các kênh (thay cho "tăng 7 ngày" vì hệ thống còn mới)
+  const chStats = Object.values(me.stats.latestByChannel) as ({ followers: number | null; total_views: number | null; videos_count: number | null } | null)[];
+  const totF = chStats.reduce((s, x) => s + (x?.followers ?? 0), 0);
+  const totV = chStats.reduce((s, x) => s + (x?.total_views ?? 0), 0);
+  const totVid = chStats.reduce((s, x) => s + (x?.videos_count ?? 0), 0);
 
   return (
     <>
@@ -225,16 +226,13 @@ export default function DashboardPage() {
 
             <div className="grid grid-3" style={{ marginTop: 16 }}>
               <div className="stat">
-                <b>+{fmt(me.stats.followers7)}</b><span>Follower tăng 7 ngày</span>
-                {fTrend && <span className={`tr ${fTrend.cls}`}>{fTrend.text}</span>}
+                <b>{fmt(totF)}</b><span>Tổng follower</span>
               </div>
               <div className="stat">
-                <b>{fmt(me.stats.views7)}</b><span>Lượt xem 7 ngày</span>
-                {vTrend && <span className={`tr ${vTrend.cls}`}>{vTrend.text}</span>}
+                <b>{fmt(totV)}</b><span>Tổng lượt xem</span>
               </div>
               <div className="stat">
-                <b>{fmt(me.stats.videos7)}</b><span>Video đã đăng 7 ngày</span>
-                {vidLack && <span className="tr down">▼ thiếu {quota - me.stats.videos7} so với chỉ tiêu</span>}
+                <b>{fmt(totVid)}</b><span>Số video (reel)</span>
               </div>
             </div>
           </div>
