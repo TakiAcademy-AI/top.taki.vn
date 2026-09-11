@@ -106,7 +106,7 @@ export default function DashboardPage() {
       : await fetch("/api/channels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newChan) });
     const d = await r.json();
     if (r.ok) {
-      toast(editId ? "Đã sửa kênh. Nhớ gắn mã ID vào bio rồi bấm Xác minh." : "Đã thêm kênh. Gắn mã ID vào bio để xác minh.");
+      toast(editId ? "Đã sửa kênh. Hệ thống sẽ tự xác minh, hoặc bấm Xác minh ngay." : "Đã thêm kênh. Hệ thống sẽ tự xác minh trong 30 phút (hoặc bấm Xác minh ngay).");
       setShowAdd(false);
       setEditId(null);
       setNewChan({ platform: platforms[0]?.value ?? "tiktok", url: "" });
@@ -215,8 +215,8 @@ export default function DashboardPage() {
                       </p>
                     )}
                     <p className="mini-note">
-                      Cách xác minh: chèn mã <b>{me.student.public_id}</b> vào bio/mô tả kênh, rồi bấm{" "}
-                      <b>“Xác minh ngay”</b> (hoặc chờ hệ thống tự quét — cứ 30 phút một lần).
+                      Kênh sẽ được <b>tự động xác minh</b> khi hệ thống quét (mỗi 30 phút). Muốn xác minh
+                      liền thì bấm <b>“Xác minh ngay”</b>. Không cần chèn mã gì vào bio cả.
                     </p>
                   </div>
                 );

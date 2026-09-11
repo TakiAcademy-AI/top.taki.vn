@@ -224,7 +224,7 @@ export default function RegisterPage() {
                 + Thêm kênh
               </button>
               <p className="mini-note">
-                Có thể đăng ký nhiều kênh trên nhiều nền tảng. Hệ thống sẽ xác minh quyền sở hữu bằng mã ID gắn trong bio.
+                Có thể đăng ký nhiều kênh trên nhiều nền tảng. Hệ thống tự động xác minh kênh khi quét — không cần chèn mã gì cả.
               </p>
             </div>
             {!otpMode ? (

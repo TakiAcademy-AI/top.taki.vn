@@ -246,29 +246,26 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
 
   let verified = false;
   if (ch.status === "pending") {
-    const publicId: string = ch.students?.public_id ?? "";
-    if (publicId && prof.bio.toUpperCase().includes(publicId.toUpperCase())) {
-      await db
-        .from("channels")
-        .update({
-          status: "verified",
-          verified_at: new Date().toISOString(),
-          verified_by: "system",
-          // Mô hình điểm: tính TOÀN BỘ follower hiện có -> mốc khởi điểm = 0
-          // (kênh cũ đã có sẵn follower khi vào đua cũng được tính hết thành điểm).
-          baseline_followers: 0,
-          baseline_views: 0,
-        })
-        .eq("id", ch.id);
-      await db.from("audit_logs").insert({
-        actor_id: "system",
-        action: "verify_channel_bio",
-        target_type: "channel",
-        target_id: ch.id,
-        detail: { public_id: publicId, followers: prof.followers, engine: "direct" },
-      });
-      verified = true;
-    }
+    // KHÔNG cần mã trong bio: quét đọc được kênh là tự động xác minh.
+    // Mốc khởi điểm = 0 -> tính toàn bộ follower hiện có thành điểm.
+    await db
+      .from("channels")
+      .update({
+        status: "verified",
+        verified_at: new Date().toISOString(),
+        verified_by: "system",
+        baseline_followers: 0,
+        baseline_views: 0,
+      })
+      .eq("id", ch.id);
+    await db.from("audit_logs").insert({
+      actor_id: "system",
+      action: "verify_channel_auto",
+      target_type: "channel",
+      target_id: ch.id,
+      detail: { followers: prof.followers, engine: "direct" },
+    });
+    verified = true;
   }
 
   // Chống nhiễu IP: Facebook hay bóp số về 0/trống với IP máy chủ dù kênh có follower thật.

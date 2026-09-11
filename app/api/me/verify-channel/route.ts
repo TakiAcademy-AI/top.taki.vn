@@ -13,8 +13,8 @@ const SCRAPERS: Record<string, (u: string) => Promise<any>> = {
 };
 
 /**
- * Học viên tự bấm "Xác minh ngay" một kênh của mình sau khi đã dán mã vào bio —
- * quét kênh on-demand thay vì đợi cron 5:30. Chỉ tác động kênh của chính mình, đang pending.
+ * Học viên tự bấm "Xác minh ngay" một kênh của mình — quét kênh on-demand rồi xác minh luôn.
+ * KHÔNG cần chèn mã vào bio (theo yêu cầu vận hành). Chỉ tác động kênh của chính mình, đang pending.
  * Chống spam: mỗi kênh chỉ quét lại sau 90 giây (tránh làm nền tảng chặn IP).
  */
 export async function POST(req: NextRequest) {
@@ -58,50 +58,36 @@ export async function POST(req: NextRequest) {
   } catch {
     prof = null;
   }
-  if (!prof) {
-    return jsonError("Chưa đọc được kênh (trang có thể bắt đăng nhập hoặc sai link). Thử lại sau ít phút hoặc kiểm tra link kênh.");
-  }
 
-  const publicId: string = ch.students?.public_id ?? "";
   const date = todayVN();
 
-  // Lưu snapshot hôm nay
-  await db.from("channel_snapshots").upsert(
-    {
-      channel_id: ch.id, snapshot_date: date,
-      followers: prof.followers, total_views: prof.totalViews,
-      videos_count: prof.videosCount, engagement: prof.engagement,
-      raw: prof.raw, scrape_status: "ok",
-    },
-    { onConflict: "channel_id,snapshot_date" }
-  );
-
-  // Bio chứa mã ID -> xác minh + chốt baseline
-  const bioOk = publicId && String(prof.bio ?? "").toUpperCase().includes(publicId.toUpperCase());
-  if (bioOk) {
-    await db
-      .from("channels")
-      .update({
-        status: "verified",
-        verified_at: new Date().toISOString(),
-        verified_by: "self",
-        // Tính TOÀN BỘ follower hiện có -> mốc khởi điểm = 0
-        baseline_followers: 0,
-        baseline_views: 0,
-      })
-      .eq("id", ch.id);
-    await db.from("audit_logs").insert({
-      actor_id: sid, action: "verify_channel_self", target_type: "channel", target_id: ch.id,
-      detail: { public_id: publicId, followers: prof.followers },
-    });
-    return NextResponse.json({ ok: true, status: "verified", followers: prof.followers });
+  // Đọc được thì lưu snapshot hôm nay (nếu không đọc được vẫn xác minh, lần quét sau sẽ có số)
+  if (prof) {
+    await db.from("channel_snapshots").upsert(
+      {
+        channel_id: ch.id, snapshot_date: date,
+        followers: prof.followers, total_views: prof.totalViews,
+        videos_count: prof.videosCount, engagement: prof.engagement,
+        raw: prof.raw, scrape_status: "ok",
+      },
+      { onConflict: "channel_id,snapshot_date" }
+    );
   }
 
-  // Không thấy mã trong bio
-  return NextResponse.json({
-    ok: false,
-    status: "pending",
-    reason: "no_code",
-    message: `Chưa thấy mã ${publicId} trong bio/mô tả kênh. Hãy chèn đúng mã này rồi bấm lại.`,
+  // Xác minh luôn — KHÔNG cần mã trong bio. Mốc khởi điểm = 0 -> tính toàn bộ follower hiện có.
+  await db
+    .from("channels")
+    .update({
+      status: "verified",
+      verified_at: new Date().toISOString(),
+      verified_by: "self",
+      baseline_followers: 0,
+      baseline_views: 0,
+    })
+    .eq("id", ch.id);
+  await db.from("audit_logs").insert({
+    actor_id: sid, action: "verify_channel_self", target_type: "channel", target_id: ch.id,
+    detail: { followers: prof?.followers ?? null, scraped: !!prof },
   });
+  return NextResponse.json({ ok: true, status: "verified", followers: prof?.followers ?? null });
 }
