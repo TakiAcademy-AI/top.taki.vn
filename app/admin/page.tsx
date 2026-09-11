@@ -595,11 +595,12 @@ export default function AdminPage() {
             <div className="table-scroll">
               <table>
                 <thead>
-                  <tr><th>ID</th><th>Học viên</th><th>Lớp</th><th>Kênh</th><th>Xác minh</th><th>Điểm</th><th></th></tr>
+                  <tr><th style={{ width: 44 }}>STT</th><th>ID</th><th>Học viên</th><th>Lớp</th><th>Kênh</th><th>Xác minh</th><th>Điểm</th><th></th></tr>
                 </thead>
                 <tbody>
-                  {students.map((s) => (
+                  {students.map((s, i) => (
                     <tr key={s.id} style={s.status === "locked" ? { opacity: 0.55 } : undefined}>
+                      <td>{i + 1}</td>
                       <td><b>{s.public_id}</b></td>
                       <td>{s.full_name}{s.status === "locked" ? " 🔒" : ""}</td>
                       <td>{s.class_name ?? "—"}</td>
@@ -613,7 +614,7 @@ export default function AdminPage() {
                       <td><button className="btn-ghost btn-sm" onClick={() => openProfile(s.id)}>Hồ sơ</button></td>
                     </tr>
                   ))}
-                  {!students.length && <tr><td colSpan={7}>Không có học viên nào khớp.</td></tr>}
+                  {!students.length && <tr><td colSpan={8}>Không có học viên nào khớp.</td></tr>}
                 </tbody>
               </table>
             </div>
