@@ -96,7 +96,32 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 2. Đường đua đang mở */}
+        {/* 2. Bảng xếp hạng chi tiết ngay tại trang chủ */}
+        {(data?.campaigns.length ?? 0) > 0 && boardId && (
+          <div className="sec">
+            <div className="sec-head">
+              <h2>📊 Bảng xếp hạng chi tiết</h2>
+              <span>toàn bộ học viên · bấm vào hàng để xem danh sách kênh</span>
+            </div>
+            {data!.campaigns.length > 1 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                {data!.campaigns.map((c) => (
+                  <button
+                    key={c.id}
+                    className="btn-ghost btn-sm"
+                    onClick={() => setBoardId(c.id)}
+                    style={c.id === boardId ? { borderColor: "var(--orange)", color: "var(--orange)", fontWeight: 800 } : undefined}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <LeaderboardBoard campaignId={boardId} onOpenProfile={setProfileId} />
+          </div>
+        )}
+
+        {/* 3. Đường đua đang mở */}
         <div className="sec">
           <div className="sec-head"><h2>🏁 Đường đua đang mở</h2><span>chọn đúng lớp của bạn để vào đua</span></div>
           {data && !data.campaigns.length && (
@@ -165,31 +190,6 @@ export default function HomePage() {
             })}
           </div>
         </div>
-
-        {/* 2b. Bảng xếp hạng chi tiết ngay tại trang chủ */}
-        {(data?.campaigns.length ?? 0) > 0 && boardId && (
-          <div className="sec">
-            <div className="sec-head">
-              <h2>📊 Bảng xếp hạng chi tiết</h2>
-              <span>toàn bộ học viên · bấm vào hàng để xem danh sách kênh</span>
-            </div>
-            {data!.campaigns.length > 1 && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-                {data!.campaigns.map((c) => (
-                  <button
-                    key={c.id}
-                    className="btn-ghost btn-sm"
-                    onClick={() => setBoardId(c.id)}
-                    style={c.id === boardId ? { borderColor: "var(--orange)", color: "var(--orange)", fontWeight: 800 } : undefined}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            <LeaderboardBoard campaignId={boardId} onOpenProfile={setProfileId} />
-          </div>
-        )}
 
         {/* 3. Bảng vàng lớp + Feed chiến tích */}
         <div className="sec grid g2h">
