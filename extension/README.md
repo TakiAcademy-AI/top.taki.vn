@@ -25,8 +25,9 @@ cron `05:30` tùy ý.
 
 ## Cài đặt
 
-**Bước 1 — Bật endpoint.** Sinh token rồi dán vào biến môi trường của app (Vercel → Settings →
-Environment Variables, hoặc `.env.local` khi chạy máy nhà):
+**Bước 1 — Bật endpoint.** Sinh token rồi khai vào biến môi trường của app — đúng chỗ mà
+`SESSION_SECRET` và `CRON_SECRET` đang nằm (bảng Environment Variables của nền tảng đang host, hoặc
+`.env.local` khi chạy máy nhà):
 
 ```bash
 openssl rand -hex 32
@@ -84,7 +85,7 @@ các kênh còn lại.
 
 | Hiện tượng | Xử lý |
 |---|---|
-| `Sai hoặc thiếu INGEST_TOKEN` | Token trong popup khác với `INGEST_TOKEN` trên server. Sau khi đổi biến môi trường trên Vercel phải **redeploy** mới có hiệu lực. |
+| `Sai hoặc thiếu INGEST_TOKEN` | Token trong popup khác với `INGEST_TOKEN` trên server. Đổi biến môi trường xong phải **deploy lại** (hoặc khởi động lại tiến trình Next) mới có hiệu lực. |
 | `Cần cấp quyền truy cập ...` | Bấm **Lưu** lại và đồng ý hộp thoại quyền của Chrome. |
 | Nhiều kênh báo `bot-check` | TikTok đang nghi ngờ máy này. Mở `tiktok.com` trong tab thường, giải captcha nếu có, đăng nhập, rồi quét lại. |
 | `kênh lạ bị bỏ` trong log | Username gửi lên không khớp kênh nào đang `pending`/`verified` — kênh đã bị gỡ hoặc đổi tên. |
