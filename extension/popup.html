@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>TAKI — Quét kênh TikTok</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#111827; --mut:#6b7280; --line:#e5e7eb; --card:#f9fafb; --acc:#e11d48; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --fg:#e5e7eb; --mut:#9ca3af; --line:#272b33; --card:#171a21; }
+  }
+  * { box-sizing: border-box; }
+  body { width: 380px; margin: 0; padding: 14px; background: var(--bg); color: var(--fg);
+         font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
+  label { display: block; margin: 8px 0 3px; font-size: 12px; color: var(--mut); }
+  input[type=text], input[type=password], input[type=time] {
+    width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px;
+    background: var(--bg); color: var(--fg); font: inherit; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--card);
+           color: var(--fg); font: inherit; font-weight: 550; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--mut); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
+  fieldset { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px 12px; margin: 12px 0 0; }
+  legend { padding: 0 5px; font-size: 12px; color: var(--mut); }
+  .check { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
+  .check input { flex: 0 0 auto; width: auto; }
+  .check label { margin: 0; color: var(--fg); }
+  .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin: 9px 0 5px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--acc); transition: width .25s; }
+  .stat { font-size: 12px; color: var(--mut); }
+  pre { margin: 8px 0 0; padding: 8px; height: 150px; overflow: auto; background: var(--card);
+        border: 1px solid var(--line); border-radius: 7px; font: 11px/1.45 ui-monospace, Menlo, Consolas, monospace;
+        white-space: pre-wrap; word-break: break-word; }
+  .msg { margin-top: 8px; font-size: 12px; min-height: 16px; }
+  .msg.err { color: var(--acc); }
+</style>
+
+<h1>TAKI — Quét kênh TikTok</h1>
+
+<fieldset>
+  <legend>Kết nối</legend>
+  <label for="baseUrl">Địa chỉ hệ thống</label>
+  <input id="baseUrl" type="text" placeholder="https://top.taki.vn" spellcheck="false" />
+  <label for="token">INGEST_TOKEN</label>
+  <input id="token" type="password" placeholder="dán token từ .env" spellcheck="false" />
+  <div class="check">
+    <input id="autoEnabled" type="checkbox" />
+    <label for="autoEnabled">Tự quét mỗi ngày lúc</label>
+    <input id="autoTime" type="time" style="flex:0 0 100px" />
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="save">Lưu</button>
+    <button id="test">Kiểm tra kết nối</button>
+  </div>
+  <div id="msg" class="msg"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Quét</legend>
+  <div class="row">
+    <button id="start" class="primary">Quét kênh còn thiếu</button>
+    <button id="startAll">Quét lại tất cả</button>
+  </div>
+  <button id="stop" style="width:100%; margin-top:8px" disabled>Dừng</button>
+  <div class="bar"><i id="barFill"></i></div>
+  <div id="stat" class="stat">Chưa chạy lượt nào.</div>
+  <pre id="log"></pre>
+</fieldset>
+
+<script src="popup.js" type="module"></script>

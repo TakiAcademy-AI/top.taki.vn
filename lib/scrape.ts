@@ -284,7 +284,7 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
 }
 
 /* ==== Lưu snapshot + xác minh bio (cùng logic với pipeline cũ) ==== */
-async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string, errDetail?: string): Promise<{ ok: boolean; verified: boolean }> {
+export async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string, errDetail?: string): Promise<{ ok: boolean; verified: boolean }> {
   const db = supabaseAdmin();
   if (!prof) {
     await db.from("channel_snapshots").upsert(
@@ -428,4 +428,94 @@ export async function startDailyScrape(): Promise<ScrapeResult> {
     result.platforms.push(stat);
   }
   return result;
+}
+
+/* ==== Nạp số liệu quét từ ngoài (Chrome Extension) ====
+ * WAF của TikTok chặn theo TLS fingerprint + IP datacenter — máy chủ Vercel/VPS hay bị trả trang
+ * bot-check. Extension chạy trong Chrome thật của admin nên đọc được trang bình thường; nó gửi
+ * số liệu đã chuẩn hóa về đây. Ghi snapshot qua ĐÚNG saveProfile() của luồng quét máy chủ nên
+ * logic tự xác minh kênh, giữ số tốt gần nhất và chấm điểm không đổi. */
+
+export type ExternalProfileItem = {
+  username: string;
+  followers?: number | null;
+  totalViews?: number | null;
+  videosCount?: number | null;
+  engagement?: number | null;
+  bio?: string | null;
+  error?: string | null;
+};
+
+export type IngestResult = {
+  date: string;
+  ok: number;
+  failed: string[];
+  verified: number;
+  unknown: string[]; // username gửi lên nhưng không có kênh nào đang theo dõi
+};
+
+/** Ghi snapshot cho một lô kênh do extension quét. Idempotent theo (channel_id, snapshot_date). */
+export async function ingestExternalProfiles(
+  platform: string,
+  items: ExternalProfileItem[],
+  source = "extension"
+): Promise<IngestResult> {
+  const db = supabaseAdmin();
+  const date = todayVN();
+  const out: IngestResult = { date, ok: 0, failed: [], verified: 0, unknown: [] };
+  if (!items.length) return out;
+
+  const { data: channels } = await db
+    .from("channels")
+    .select("*")
+    .eq("platform", platform)
+    .in("status", ["pending", "verified"]);
+  const byName = new Map((channels ?? []).map((c) => [String(c.username).toLowerCase(), c]));
+
+  const runId = `${source}-${platform}-${Date.now()}`;
+  await db.from("scrape_runs").insert({
+    run_id: runId,
+    platform,
+    actor: `${source}/${platform}`,
+    status: "started",
+    channels_count: items.length,
+    cost_usd: 0,
+  });
+
+  for (const it of items) {
+    const uname = String(it.username ?? "").trim().toLowerCase().replace(/^@/, "");
+    const ch = byName.get(uname);
+    if (!ch) {
+      out.unknown.push(uname);
+      continue;
+    }
+
+    // Không có số nào đọc được -> coi như quét lỗi, giữ nguyên điểm hôm qua.
+    const hasData =
+      num(it.followers) != null || num(it.totalViews) != null || num(it.videosCount) != null;
+    const prof: NormalizedProfile | null =
+      it.error || !hasData
+        ? null
+        : {
+            ref: uname,
+            followers: num(it.followers),
+            totalViews: num(it.totalViews),
+            videosCount: num(it.videosCount),
+            engagement: num(it.engagement) ?? num(it.totalViews),
+            bio: String(it.bio ?? ""),
+            raw: { engine: `${platform}-${source}` },
+          };
+
+    const saved = await saveProfile(ch, prof, date, it.error ?? "extension: không đọc được số liệu");
+    if (saved.ok) out.ok++;
+    else out.failed.push(`${platform}:@${uname}`);
+    if (saved.verified) out.verified++;
+  }
+
+  await db
+    .from("scrape_runs")
+    .update({ status: out.ok > 0 ? "succeeded" : "failed", finished_at: new Date().toISOString() })
+    .eq("run_id", runId);
+
+  return out;
 }

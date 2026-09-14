@@ -10,6 +10,7 @@ Build theo `dac-ta-phan-mem.md` phiên bản 1.0 (01/09/2026). Giao diện bám 
 - Supabase (Postgres, RLS khóa toàn bộ với anon — mọi truy cập qua API service role)
 - Quét trực tiếp, chi phí $0 — TikTok (đọc JSON nhúng trong trang profile, fetch qua curl-impersonate) + Facebook (binary `fb` của tamnd/facebook-cli); YouTube chờ YouTube Data API key; bật/tắt nền tảng trong Admin > Quét dữ liệu
 - Vercel Cron: quét 05:30, chốt điểm 06:00 giờ VN (đã khai trong `vercel.json` theo giờ UTC)
+- Dự phòng khi TikTok chặn máy chủ: Chrome Extension trong `extension/` quét bằng trình duyệt thật rồi đẩy về `/api/ingest/tiktok` (cần `INGEST_TOKEN`) — xem `extension/README.md`
 
 ## Cài đặt lần đầu (3 bước)
 

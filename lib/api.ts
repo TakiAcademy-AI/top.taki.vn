@@ -30,3 +30,11 @@ export function checkCronSecret(req: Request): boolean {
   const url = new URL(req.url);
   return url.searchParams.get("secret") === secret;
 }
+
+/** Xác thực Chrome Extension nạp số liệu quét: header `Authorization: Bearer <INGEST_TOKEN>`.
+ *  Không đặt INGEST_TOKEN = tắt hẳn endpoint (tránh mở cửa ghi dữ liệu khi quên cấu hình). */
+export function checkIngestToken(req: Request): boolean {
+  const secret = process.env.INGEST_TOKEN;
+  if (!secret) return false;
+  return req.headers.get("authorization") === `Bearer ${secret}`;
+}
