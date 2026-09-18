@@ -200,18 +200,18 @@ export async function scrapeFacebookReels(username: string, proxy?: string): Pro
 }
 
 /** Ghi (hợp nhất) các reel vào channel_reels: mỗi reel 1 dòng theo (kênh, ngày, reel_id).
- *  Cùng reel từ 2 nguồn -> cùng id -> 1 dòng (không cộng đôi). Ghi lô 500 để tránh payload lớn. */
+ *  Cùng reel từ 2 nguồn -> cùng id -> GIỮ SỐ VIEW LỚN NHẤT (GREATEST) qua hàm merge_reels.
+ *  Không dùng "ghi đè" vì bản curl (ẩn danh) hay đọc view THẤP hơn bản ext (đăng nhập) -> tụt số oan. */
 export async function upsertReels(channelId: string, date: string, reels: ReelView[], source: string): Promise<void> {
-  const rows = (reels ?? [])
+  const clean = (reels ?? [])
     .filter((r) => r.id && Number.isFinite(r.views))
-    .map((r) => ({
-      channel_id: channelId, snapshot_date: date, reel_id: String(r.id).slice(0, 200),
-      views: Math.max(0, Math.round(r.views)), source, updated_at: new Date().toISOString(),
-    }));
-  if (!rows.length) return;
+    .map((r) => ({ id: String(r.id).slice(0, 200), views: Math.max(0, Math.round(r.views)) }));
+  if (!clean.length) return;
   const db = supabaseAdmin();
-  for (let i = 0; i < rows.length; i += 500) {
-    await db.from("channel_reels").upsert(rows.slice(i, i + 500), { onConflict: "channel_id,snapshot_date,reel_id" });
+  for (let i = 0; i < clean.length; i += 500) {
+    await db.rpc("merge_reels", {
+      p_channel: channelId, p_date: date, p_source: source, p_reels: clean.slice(i, i + 500),
+    });
   }
 }
 
