@@ -19,3 +19,6 @@ jobs:
           echo "== Tính điểm =="
           curl -sk --resolve top.taki.vn:443:$HOST_IP --max-time 120 \
             "https://top.taki.vn/api/cron/daily-scoring?secret=$CRON_SECRET" || echo "scoring lỗi"
+          echo "== Curl reels ẩn danh (tự gate theo giờ, bắt reel viral extension sót) =="
+          curl -sk --resolve top.taki.vn:443:$HOST_IP --max-time 290 \
+            "https://top.taki.vn/api/cron/reels-curl?secret=$CRON_SECRET" || echo "reels-curl timeout (server vẫn chạy nền)"

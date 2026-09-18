@@ -463,40 +463,44 @@ export async function startDailyScrape(): Promise<ScrapeResult> {
     result.platforms.push(stat);
   }
 
-  // Lượt phụ: server tự curl bản KHÔNG đăng nhập lấy reel viral/top mà extension (đăng nhập) hay sót.
-  // Tốn proxy (mỗi trang ~19MB) nên GIỚI HẠN mỗi 4 giờ; extension vẫn lo phần reel mới mỗi lần quét.
-  try {
-    await curlReelsUnion(channels ?? [], configs ?? [], date);
-  } catch (e) {
-    console.error("[scrape] curlReelsUnion", e);
-  }
+  // Lượt curl reels (bản ẩn danh, bắt reel viral extension hay sót) tách sang cron RIÊNG
+  // /api/cron/reels-curl để đủ thời gian chạy SONG SONG cả 50 kênh (trước chạy chung bị timeout ~4 kênh).
   return result;
 }
 
-const REELS_CURL_EVERY_MS = 4 * 60 * 60_000; // 4 giờ
-
-/** Curl bản không-đăng-nhập cho các kênh Facebook, ghi vào channel_reels (source=curl) rồi hợp nhất.
- *  Có time-gate qua app_settings.last_reels_curl_ms để không curl 19MB/kênh mỗi 30 phút. */
-async function curlReelsUnion(channels: any[], configs: { platform: string }[], date: string): Promise<void> {
-  if (!configs.some((c) => c.platform === "facebook")) return;
+/** Curl bản KHÔNG đăng nhập cho MỌI kênh FB, SONG SONG theo lô -> ghi channel_reels (source=curl, GREATEST)
+ *  -> hợp nhất với reel extension. Chạy như cron riêng (đủ thời gian cho cả 50 kênh). Có gate giờ để đỡ proxy
+ *  (mỗi trang reels ~19MB): app_settings.reels_curl_hours (mặc định 4h). force=true bỏ qua gate. */
+export async function runReelsCurl(date: string, opts: { force?: boolean; concurrency?: number } = {}): Promise<{ ok: number; total: number; skipped?: boolean }> {
   const db = supabaseAdmin();
-  const { data: g } = await db.from("app_settings").select("value").eq("key", "last_reels_curl_ms").maybeSingle();
-  const last = Number(g?.value) || 0;
-  if (Date.now() - last < REELS_CURL_EVERY_MS) return; // chưa tới hạn
-  await db.from("app_settings").upsert({ key: "last_reels_curl_ms", value: String(Date.now()) }, { onConflict: "key" });
-
-  const proxy = await getScrapeProxy();
-  const fb = channels.filter((c) => c.platform === "facebook" && (c.status === "verified" || c.status === "pending"));
-  for (const ch of fb) {
-    try {
-      const r = await scrapeFacebookReels(ch.username, proxy);
-      if (r && r.reels.length) {
-        await upsertReels(ch.id, date, r.reels, "curl");
-        await recomputeChannelViews(ch.id, date);
-      }
-    } catch (e) {
-      console.error(`[scrape] reels curl @${ch.username}`, e);
-    }
-    await sleep(jitter(2000));
+  if (!opts.force) {
+    const [{ data: g }, { data: h }] = await Promise.all([
+      db.from("app_settings").select("value").eq("key", "last_reels_curl_ms").maybeSingle(),
+      db.from("app_settings").select("value").eq("key", "reels_curl_hours").maybeSingle(),
+    ]);
+    const hours = Number(h?.value) > 0 ? Number(h?.value) : 4;
+    if (Date.now() - (Number(g?.value) || 0) < hours * 3_600_000) return { ok: 0, total: 0, skipped: true };
   }
+  const { data: channels } = await db
+    .from("channels").select("id, username").eq("platform", "facebook").in("status", ["verified", "pending"]);
+  const fb = channels ?? [];
+  const proxy = await getScrapeProxy();
+  const conc = Math.max(1, Math.min(opts.concurrency ?? 6, fb.length));
+  let ok = 0, idx = 0;
+  async function worker() {
+    while (idx < fb.length) {
+      const ch = fb[idx++];
+      try {
+        const r = await scrapeFacebookReels(ch.username, proxy);
+        if (r && r.reels.length) {
+          await upsertReels(ch.id, date, r.reels, "curl");
+          await recomputeChannelViews(ch.id, date);
+          ok++;
+        }
+      } catch (e) { console.error(`[reels-curl] @${ch.username}`, e); }
+    }
+  }
+  await Promise.all(Array.from({ length: conc }, () => worker()));
+  await db.from("app_settings").upsert({ key: "last_reels_curl_ms", value: String(Date.now()) }, { onConflict: "key" });
+  return { ok, total: fb.length };
 }
