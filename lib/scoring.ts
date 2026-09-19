@@ -239,13 +239,25 @@ export async function runDailyScoring(date: string): Promise<ScoringReport> {
   return report;
 }
 
+/** Lấy TẤT CẢ dòng score_entries của campaign — PostgREST mặc định CẮT còn 1000 dòng/lần, nên phải
+ *  phân trang (.range) đọc hết. Nếu không, khi số dòng vượt 1000 sẽ tính thiếu điểm -> total_score sai. */
+export async function fetchAllEntries(db: any, campaignId: string, columns: string): Promise<any[]> {
+  const out: any[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db
+      .from("score_entries").select(columns).eq("campaign_id", campaignId).range(from, from + PAGE - 1);
+    if (error) throw error;
+    out.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
+}
+
 /** Tính lại tổng điểm + hạng cho một chiến dịch từ score_entries (gồm cả điều chỉnh tay). */
 export async function recomputeRanks(campaignId: string, date: string): Promise<void> {
   const db = supabaseAdmin();
-  const { data: entries } = await db
-    .from("score_entries")
-    .select("student_id, points")
-    .eq("campaign_id", campaignId);
+  const entries = await fetchAllEntries(db, campaignId, "student_id, points");
   const totals = new Map<string, number>();
   for (const e of entries ?? []) {
     totals.set(e.student_id, (totals.get(e.student_id) ?? 0) + Number(e.points));

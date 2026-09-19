@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireAdmin, jsonError } from "@/lib/api";
+import { fetchAllEntries } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +31,7 @@ export async function GET(req: NextRequest) {
     .select("student_id, total_score, current_rank, students!inner(public_id, full_name, classes(name))")
     .eq("campaign_id", campaignId);
 
-  const { data: entries } = await db
-    .from("score_entries")
-    .select("student_id, metric, points")
-    .eq("campaign_id", campaignId);
+  const entries = await fetchAllEntries(db, campaignId, "student_id, metric, points");
   const byStudent = new Map<string, Record<string, number>>();
   for (const e of entries ?? []) {
     if (!byStudent.has(e.student_id)) byStudent.set(e.student_id, {});

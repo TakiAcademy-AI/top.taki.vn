@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { jsonError } from "@/lib/api";
 import { cached } from "@/lib/cache";
 import { todayVN } from "@/lib/format";
+import { fetchAllEntries } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -48,14 +49,13 @@ async function buildLeaderboard(campaignId: string, detail: boolean) {
 
   if (detail) {
     const ids0 = (data ?? []).map((r: any) => r.student_id);
-    // entries + channels độc lập -> chạy SONG SONG
-    const [entriesRes, chansRes] = await Promise.all([
-      db.from("score_entries").select("student_id, metric, points, entry_date").eq("campaign_id", campaignId),
+    // entries + channels độc lập -> chạy SONG SONG. entries phân trang đọc HẾT (>1000 dòng vẫn đủ).
+    const [entries, chansRes] = await Promise.all([
+      fetchAllEntries(db, campaignId, "student_id, metric, points, entry_date"),
       ids0.length
         ? db.from("channels").select("id, student_id, platform, username, url").in("student_id", ids0).eq("status", "verified")
         : Promise.resolve({ data: [] as any[] }),
     ]);
-    const entries = entriesRes.data;
     // "Điểm hôm nay" = điểm phát sinh ĐÚNG ngày hôm nay (không phải "ngày mới nhất có điểm").
     // Tránh trường hợp điểm nền dồn 1 ngày -> hôm nay = tổng.
     const today = todayVN();
