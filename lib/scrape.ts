@@ -321,6 +321,15 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
 async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string, errDetail?: string): Promise<{ ok: boolean; verified: boolean }> {
   const db = supabaseAdmin();
   if (!prof) {
+    // KHÔNG đè nếu hôm nay đã có snapshot 'ok' (vd TikTok do extension ghi, server curl fail WAF chạy sau).
+    // Tránh lật status -> 'failed' làm chấm điểm bỏ qua ngày đó + báo "quét lỗi" giả.
+    const { data: existing } = await db
+      .from("channel_snapshots")
+      .select("scrape_status")
+      .eq("channel_id", ch.id)
+      .eq("snapshot_date", date)
+      .maybeSingle();
+    if (existing?.scrape_status === "ok") return { ok: true, verified: false };
     await db.from("channel_snapshots").upsert(
       { channel_id: ch.id, snapshot_date: date, scrape_status: "failed", raw: { engine: "direct", error: errDetail ?? "no-data" } },
       { onConflict: "channel_id,snapshot_date" }
@@ -413,6 +422,9 @@ export async function startDailyScrape(): Promise<ScrapeResult> {
   const result: ScrapeResult = { engine: "direct", platforms: [], skipped: [] };
 
   for (const cfg of configs ?? []) {
+    // TikTok: server curl KHÔNG BAO GIỜ qua WAF SlardarWAF -> extension (trình duyệt thật) lo. Bỏ qua ở
+    // server để khỏi curl phí + khỏi ghi 'failed' đè lên số extension. (Kể cả khi platform_configs bị reset.)
+    if (cfg.platform === "tiktok") continue;
     const scraper = SCRAPERS[cfg.platform];
     const list = (channels ?? []).filter((c) => c.platform === cfg.platform);
     if (!list.length) continue;
