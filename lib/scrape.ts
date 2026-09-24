@@ -220,8 +220,13 @@ export async function recomputeChannelViews(channelId: string, date: string): Pr
   const db = supabaseAdmin();
   const { data } = await db.from("channel_reels").select("views").eq("channel_id", channelId).eq("snapshot_date", date);
   const rows = data ?? [];
-  const total = rows.reduce((s: number, r: any) => s + (Number(r.views) || 0), 0);
-  const count = rows.length;
+  let total = rows.reduce((s: number, r: any) => s + (Number(r.views) || 0), 0);
+  let count = rows.length;
+  // Mốc cao nhất trong ngày: không cho tụt dưới giá trị đã lưu (chống điểm view tụt do 1 lượt quét sót reel).
+  const { data: cur } = await db
+    .from("channel_snapshots").select("total_views, videos_count").eq("channel_id", channelId).eq("snapshot_date", date).maybeSingle();
+  if (cur?.total_views != null) total = Math.max(total, Number(cur.total_views));
+  if (cur?.videos_count != null) count = Math.max(count, Number(cur.videos_count));
   await db.from("channel_snapshots").upsert(
     { channel_id: channelId, snapshot_date: date, total_views: total, videos_count: count },
     { onConflict: "channel_id,snapshot_date" }
@@ -380,18 +385,34 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
     }
   }
 
+  // MỐC CAO NHẤT TRONG NGÀY: không cho ghi giá trị THẤP hơn giá trị đã lưu cùng ngày. Facebook "talking
+  // about this" (engagement) dao động lên-xuống trong ngày -> nếu lấy số live thấp thì điểm hôm nay tụt.
+  // Giữ số cao nhất -> điểm chỉ tăng, không tụt do dao động. (Áp cho follower + engagement + view + video.)
+  const { data: cur } = await db
+    .from("channel_snapshots")
+    .select("followers, engagement, total_views, videos_count")
+    .eq("channel_id", ch.id)
+    .eq("snapshot_date", date)
+    .maybeSingle();
+  const hw = (nv: number | null | undefined, ev: any): number | null => {
+    const n = nv == null ? null : Number(nv);
+    const e = ev == null ? null : Number(ev);
+    if (n == null) return e;
+    return e != null && e > n ? e : n;
+  };
+
   const row: Record<string, unknown> = {
     channel_id: ch.id,
     snapshot_date: date,
-    followers: followersOut,
-    engagement: engagementOut,
+    followers: hw(followersOut, cur?.followers),
+    engagement: hw(engagementOut, cur?.engagement),
     raw: prof.raw,
     scrape_status: "ok",
   };
   // Chỉ ghi total_views/videos_count khi CÓ số (vd engine tiktok). Với Facebook để null -> KHÔNG đụng
-  // vào giá trị worker Playwright đã ghi (tránh ghi đè số reel đầy đủ bằng số 10-reel/không có).
-  if (prof.totalViews != null) row.total_views = prof.totalViews;
-  if (prof.videosCount != null) row.videos_count = prof.videosCount;
+  // vào giá trị channel_reels union đã ghi (tránh đè số reel đầy đủ bằng số ít/không có).
+  if (prof.totalViews != null) row.total_views = hw(prof.totalViews, cur?.total_views);
+  if (prof.videosCount != null) row.videos_count = hw(prof.videosCount, cur?.videos_count);
 
   const { error } = await db.from("channel_snapshots").upsert(row, { onConflict: "channel_id,snapshot_date" });
   return { ok: !error, verified };

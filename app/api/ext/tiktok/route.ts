@@ -36,14 +36,23 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (lastGood?.followers) followersOut = lastGood.followers;
     }
+    // Mốc cao nhất trong ngày: không cho ghi thấp hơn giá trị đã có cùng ngày (chống điểm tụt do dao động).
+    const { data: cur } = await db
+      .from("channel_snapshots")
+      .select("followers, total_views, videos_count, engagement")
+      .eq("channel_id", r.channel_id)
+      .eq("snapshot_date", today)
+      .maybeSingle();
+    const hw = (nv: number | null, ev: any): number =>
+      Math.max(nv ?? 0, ev == null ? 0 : Number(ev));
     const { error } = await db.from("channel_snapshots").upsert(
       {
         channel_id: r.channel_id,
         snapshot_date: today,
-        followers: followersOut,
-        total_views: Number(r.total_views) || 0,
-        videos_count: Number(r.videos_count) || 0,
-        engagement: Number(r.engagement) || 0,
+        followers: hw(followersOut, cur?.followers),
+        total_views: hw(Number(r.total_views) || 0, cur?.total_views),
+        videos_count: hw(Number(r.videos_count) || 0, cur?.videos_count),
+        engagement: hw(Number(r.engagement) || 0, cur?.engagement),
         scrape_status: "ok",
         raw: { engine: "tiktok-extension" },
       },
