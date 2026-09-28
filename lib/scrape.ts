@@ -335,10 +335,24 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
       .eq("snapshot_date", date)
       .maybeSingle();
     if (existing?.scrape_status === "ok") return { ok: true, verified: false };
-    await db.from("channel_snapshots").upsert(
-      { channel_id: ch.id, snapshot_date: date, scrape_status: "failed", raw: { engine: "direct", error: errDetail ?? "no-data" } },
-      { onConflict: "channel_id,snapshot_date" }
-    );
+    // Quét fail (vd proxy chết): GIỮ số tốt gần nhất thay vì để null -> tránh bảng hiển thị -100%.
+    // Vẫn để scrape_status='failed' để chấm điểm dùng mốc so sánh cũ (không tính tăng trưởng ảo ngày này).
+    const { data: lastGood } = await db
+      .from("channel_snapshots")
+      .select("followers, engagement")
+      .eq("channel_id", ch.id)
+      .gt("followers", 0)
+      .order("snapshot_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    // Chỉ carry follower + engagement (do quét FB sở hữu). total_views/videos_count để reels union lo, không đụng.
+    const failRow: Record<string, unknown> = {
+      channel_id: ch.id, snapshot_date: date, scrape_status: "failed",
+      raw: { engine: "direct", error: errDetail ?? "no-data" },
+    };
+    if (lastGood?.followers != null) failRow.followers = lastGood.followers;
+    if (lastGood?.engagement != null) failRow.engagement = lastGood.engagement;
+    await db.from("channel_snapshots").upsert(failRow, { onConflict: "channel_id,snapshot_date" });
     return { ok: false, verified: false };
   }
 
