@@ -423,11 +423,21 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
     return e != null && e > n ? e : n;
   };
 
+  // ENGAGEMENT ("talking about this") là chỉ số CUỘN, lên-xuống. Giữ MỐC ĐỈNH qua các ngày -> điểm cộng
+  // dồn = đỉnh × 2, KHỚP lượt hiển thị, không cộng dồn ảo mỗi lần bật lên. (follower/view đã tăng đều nên
+  // chỉ cần giữ đỉnh cho engagement.)
+  let engOut = hw(engagementOut, cur?.engagement);
+  const { data: engPeak } = await db
+    .from("channel_snapshots").select("engagement")
+    .eq("channel_id", ch.id).lt("snapshot_date", date)
+    .order("engagement", { ascending: false }).limit(1).maybeSingle();
+  if (engPeak?.engagement != null) engOut = Math.max(Number(engOut ?? 0), Number(engPeak.engagement));
+
   const row: Record<string, unknown> = {
     channel_id: ch.id,
     snapshot_date: date,
     followers: hw(followersOut, cur?.followers),
-    engagement: hw(engagementOut, cur?.engagement),
+    engagement: engOut,
     raw: prof.raw,
     scrape_status: "ok",
   };

@@ -45,6 +45,12 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     const hw = (nv: number | null, ev: any): number =>
       Math.max(nv ?? 0, ev == null ? 0 : Number(ev));
+    // engagement giữ MỐC ĐỈNH qua các ngày (chỉ số cuộn) -> điểm = lượt × 2 nhất quán.
+    const { data: engPeak } = await db
+      .from("channel_snapshots").select("engagement")
+      .eq("channel_id", r.channel_id).lt("snapshot_date", today)
+      .order("engagement", { ascending: false }).limit(1).maybeSingle();
+    const engOut = Math.max(hw(Number(r.engagement) || 0, cur?.engagement), engPeak?.engagement == null ? 0 : Number(engPeak.engagement));
     const { error } = await db.from("channel_snapshots").upsert(
       {
         channel_id: r.channel_id,
@@ -52,7 +58,7 @@ export async function POST(req: NextRequest) {
         followers: hw(followersOut, cur?.followers),
         total_views: hw(Number(r.total_views) || 0, cur?.total_views),
         videos_count: hw(Number(r.videos_count) || 0, cur?.videos_count),
-        engagement: hw(Number(r.engagement) || 0, cur?.engagement),
+        engagement: engOut,
         scrape_status: "ok",
         raw: { engine: "tiktok-extension" },
       },
