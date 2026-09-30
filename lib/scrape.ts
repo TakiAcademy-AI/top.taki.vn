@@ -40,8 +40,8 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-// Proxy quét: ưu tiên env SCRAPE_PROXY; nếu không có thì đọc từ DB (app_settings.scrape_proxy).
-// Cho phép bật/đổi/tắt proxy mà KHÔNG cần sửa env server (chỉ cần đổi 1 dòng trong DB). Cache 5 phút.
+// Proxy quét: ưu tiên env SCRAPE_PROXY; rồi ZingProxy Open API (tự lấy IP hiện tại -> proxy XOAY IP
+// bao nhiêu lần cũng không hỏng); cuối cùng fallback app_settings.scrape_proxy (IP tĩnh, chỉnh tay). Cache 5 phút.
 let _proxyCache: { val: string | undefined; at: number } | null = null;
 async function getScrapeProxy(): Promise<string | undefined> {
   if (process.env.SCRAPE_PROXY) return process.env.SCRAPE_PROXY;
@@ -49,8 +49,27 @@ async function getScrapeProxy(): Promise<string | undefined> {
   if (_proxyCache && now - _proxyCache.at < 300_000) return _proxyCache.val;
   let val: string | undefined;
   try {
-    const { data } = await supabaseAdmin().from("app_settings").select("value").eq("key", "scrape_proxy").maybeSingle();
-    val = (data?.value ?? "").trim() || undefined;
+    const { data } = await supabaseAdmin().from("app_settings").select("key, value").in("key", ["scrape_proxy", "zingproxy_key"]);
+    const map: Record<string, string> = {};
+    for (const r of data ?? []) map[r.key] = (r.value ?? "").trim();
+
+    // ZingProxy Open API: lấy IP hiện tại theo key -> tự cập nhật khi proxy xoay IP (khỏi sửa tay).
+    const key = map.zingproxy_key;
+    if (key) {
+      try {
+        const j: any = await fetch(`https://api.zingproxy.com/open/get-proxy/${key}`, {
+          signal: AbortSignal.timeout(8000),
+        }).then((r) => r.json());
+        const hp = j?.proxy?.httpProxy; // dạng "ip:port:user:pass"
+        if (hp) {
+          const [ip, port, user, pass] = String(hp).split(":");
+          if (ip && port) val = `http://${user}:${pass}@${ip}:${port}`;
+        }
+      } catch {
+        /* API lỗi -> rơi xuống proxy tĩnh bên dưới */
+      }
+    }
+    if (!val) val = map.scrape_proxy || undefined;
   } catch {
     val = _proxyCache?.val; // lỗi DB: giữ giá trị cache cũ nếu có
   }
