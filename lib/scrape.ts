@@ -253,19 +253,19 @@ export async function recomputeChannelViews(channelId: string, date: string): Pr
     total = Number(row?.total) || 0;
     count = Number(row?.cnt) || 0;
   } catch { /* RPC lỗi -> rơi về mốc cũ bên dưới */ }
-  // Mốc cao nhất TRONG NGÀY: không tụt dưới giá trị đã lưu hôm nay (1 lượt quét sót reel không làm tụt).
-  const { data: cur } = await db
-    .from("channel_snapshots").select("total_views, videos_count").eq("channel_id", channelId).eq("snapshot_date", date).maybeSingle();
-  if (cur?.total_views != null) total = Math.max(total, Number(cur.total_views));
-  if (cur?.videos_count != null) count = Math.max(count, Number(cur.videos_count));
-  // Mốc cao nhất QUA CÁC NGÀY: view reel vốn CHỈ TĂNG (không bao giờ giảm). Nếu 1 ngày curl lỡ (proxy chết,
-  // timing) chỉ bắt được số ext thấp -> KHÔNG cho tụt dưới tổng đã đạt hôm trước -> điểm view không dao động sốc.
-  const { data: prevMax } = await db
-    .from("channel_snapshots").select("total_views, videos_count")
-    .eq("channel_id", channelId).lt("snapshot_date", date)
-    .order("total_views", { ascending: false }).limit(1).maybeSingle();
-  if (prevMax?.total_views != null) total = Math.max(total, Number(prevMax.total_views));
-  if (prevMax?.videos_count != null) count = Math.max(count, Number(prevMax.videos_count));
+  // MỐC CAO NHẤT (mọi ngày kể cả hôm nay) — view reel CHỈ TĂNG, không bao giờ cho tụt dưới đỉnh đã đạt.
+  // Dùng nullsFirst:false để BỎ QUA ngày total_views null (nếu không, order desc lấy nhầm dòng null -> mốc
+  // không áp dụng -> view có thể về 0 khi RPC union lỗi tạm). Đây là lớp chống view-về-0.
+  const { data: hwT } = await db
+    .from("channel_snapshots").select("total_views")
+    .eq("channel_id", channelId).lte("snapshot_date", date)
+    .order("total_views", { ascending: false, nullsFirst: false }).limit(1).maybeSingle();
+  if (hwT?.total_views != null) total = Math.max(total, Number(hwT.total_views));
+  const { data: hwC } = await db
+    .from("channel_snapshots").select("videos_count")
+    .eq("channel_id", channelId).lte("snapshot_date", date)
+    .order("videos_count", { ascending: false, nullsFirst: false }).limit(1).maybeSingle();
+  if (hwC?.videos_count != null) count = Math.max(count, Number(hwC.videos_count));
   await db.from("channel_snapshots").upsert(
     { channel_id: channelId, snapshot_date: date, total_views: total, videos_count: count },
     { onConflict: "channel_id,snapshot_date" }
