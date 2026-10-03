@@ -3,7 +3,7 @@ import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 import { supabaseAdmin } from "./supabase";
-import { todayVN } from "./format";
+import { todayVN, addDays } from "./format";
 
 /** Số liệu chuẩn hóa của một kênh sau khi quét. */
 export type NormalizedProfile = {
@@ -234,13 +234,25 @@ export async function upsertReels(channelId: string, date: string, reels: ReelVi
   }
 }
 
-/** Tính lại total_views + videos_count của kênh = HỢP NHẤT mọi reel (mọi nguồn) trong ngày. */
+/** Tính lại total_views + videos_count = HỢP NHẤT reel qua N NGÀY gần nhất (mỗi reel lấy view cao nhất).
+ *  Vì extension mỗi lần quét chỉ bắt được 1 TẬP reel khác nhau (sót ngẫu nhiên), tính theo 1 ngày sẽ thiếu
+ *  reel. Gộp N ngày (app_settings.reel_union_days, mặc định 7) -> gom đủ mọi reel hiện có; reel đã xoá >N
+ *  ngày tự rơi ra (không tính oan). */
 export async function recomputeChannelViews(channelId: string, date: string): Promise<{ total: number; count: number }> {
   const db = supabaseAdmin();
-  const { data } = await db.from("channel_reels").select("views").eq("channel_id", channelId).eq("snapshot_date", date);
-  const rows = data ?? [];
-  let total = rows.reduce((s: number, r: any) => s + (Number(r.views) || 0), 0);
-  let count = rows.length;
+  let unionDays = 7;
+  try {
+    const { data: cfg } = await db.from("app_settings").select("value").eq("key", "reel_union_days").maybeSingle();
+    if (cfg?.value && Number(cfg.value) > 0) unionDays = Number(cfg.value);
+  } catch { /* dùng mặc định 7 */ }
+  const since = addDays(date, -(unionDays - 1));
+  let total = 0, count = 0;
+  try {
+    const { data: u } = await db.rpc("channel_union_views", { p_channel: channelId, p_since: since });
+    const row = Array.isArray(u) ? u[0] : u;
+    total = Number(row?.total) || 0;
+    count = Number(row?.cnt) || 0;
+  } catch { /* RPC lỗi -> rơi về mốc cũ bên dưới */ }
   // Mốc cao nhất TRONG NGÀY: không tụt dưới giá trị đã lưu hôm nay (1 lượt quét sót reel không làm tụt).
   const { data: cur } = await db
     .from("channel_snapshots").select("total_views, videos_count").eq("channel_id", channelId).eq("snapshot_date", date).maybeSingle();
