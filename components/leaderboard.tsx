@@ -124,18 +124,19 @@ export function LBTable({ rows, onOpen }: { rows: LBDetailRow[]; onOpen: (id: st
                       </div>
                     </div>
                   </td>
-                  <td className="num pts">{fmt(r.total_score)}{r.today_points > 0 && <em>+{fmt(r.today_points)} hôm nay</em>}</td>
+                  <td className="num pts">{fmt(r.total_score)}</td>
                   <td className="num">{compact(r.channel_followers)}</td>
                   <td className="num">{compact(r.channel_views)}</td>
                   <td className="num">{compact(r.channel_engagement)}</td>
                   <td className="num">
+                    {Math.round(r.today_points) >= 1 && <span className="up">▲ +{fmt(r.today_points)} đ</span>}
+                    {d.text && <span className={`delta ${d.cls}`} style={{ marginLeft: 6 }}>{d.text}</span>}
                     {r.follower_growth_pct != null && r.follower_growth_pct !== 0 && (
-                      <span className={r.follower_growth_pct > 0 ? "up" : "down"}>
-                        {r.follower_growth_pct > 0 ? "↗" : "↘"} {Math.abs(r.follower_growth_pct)}%
+                      <span className={r.follower_growth_pct > 0 ? "up" : "down"} style={{ marginLeft: 6, opacity: 0.7, fontSize: "0.85em" }}>
+                        {r.follower_growth_pct > 0 ? "↗" : "↘"}{Math.abs(r.follower_growth_pct)}%
                       </span>
                     )}
-                    {d.text && <span className={`delta ${d.cls}`} style={{ marginLeft: 6 }}>{d.text}</span>}
-                    {r.follower_growth_pct == null && !d.text && "—"}
+                    {Math.round(r.today_points) < 1 && !d.text && (r.follower_growth_pct == null || r.follower_growth_pct === 0) && "—"}
                   </td>
                   <td className="chev">{isOpen ? "▴" : "▾"}</td>
                 </tr>
