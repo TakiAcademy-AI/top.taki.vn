@@ -369,13 +369,11 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
     // Tránh lật status -> 'failed' làm chấm điểm bỏ qua ngày đó + báo "quét lỗi" giả.
     const { data: existing } = await db
       .from("channel_snapshots")
-      .select("scrape_status")
+      .select("scrape_status, followers, engagement")
       .eq("channel_id", ch.id)
       .eq("snapshot_date", date)
       .maybeSingle();
-    if (existing?.scrape_status === "ok") return { ok: true, verified: false };
-    // Quét fail (vd proxy chết): GIỮ số tốt gần nhất thay vì để null -> tránh bảng hiển thị -100%.
-    // Vẫn để scrape_status='failed' để chấm điểm dùng mốc so sánh cũ (không tính tăng trưởng ảo ngày này).
+    // Số follower/engagement tốt gần nhất để bù (dùng cho CẢ hai nhánh dưới).
     const { data: lastGood } = await db
       .from("channel_snapshots")
       .select("followers, engagement")
@@ -384,6 +382,20 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
       .order("snapshot_date", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (existing?.scrape_status === "ok") {
+      // Hôm nay đã có snapshot 'ok' (vd extension ghi view, server curl fail WAF chạy sau). KHÔNG lật
+      // status -> 'failed' (tránh chấm điểm bỏ ngày + báo "quét lỗi" giả). NHƯNG vẫn BÙ follower/engagement
+      // nếu đang trống -> tránh kênh có view mà follower = 0 (extension chỉ ghi view, không ghi follower).
+      const patch: Record<string, unknown> = {};
+      if ((existing.followers == null || existing.followers === 0) && lastGood?.followers != null) patch.followers = lastGood.followers;
+      if ((existing.engagement == null || existing.engagement === 0) && lastGood?.engagement != null) patch.engagement = lastGood.engagement;
+      if (Object.keys(patch).length) {
+        await db.from("channel_snapshots").update(patch).eq("channel_id", ch.id).eq("snapshot_date", date);
+      }
+      return { ok: true, verified: false };
+    }
+    // Quét fail (vd proxy chết): GIỮ số tốt gần nhất thay vì để null -> tránh bảng hiển thị -100%.
+    // Vẫn để scrape_status='failed' để chấm điểm dùng mốc so sánh cũ (không tính tăng trưởng ảo ngày này).
     // Chỉ carry follower + engagement (do quét FB sở hữu). total_views/videos_count để reels union lo, không đụng.
     const failRow: Record<string, unknown> = {
       channel_id: ch.id, snapshot_date: date, scrape_status: "failed",
