@@ -30,21 +30,13 @@ export async function POST(req: NextRequest) {
       { channel_id: r.channel_id, snapshot_date: today, scrape_status: "ok" },
       { onConflict: "channel_id,snapshot_date" }
     );
-    if (reels.length) {
-      // Có danh sách reel -> hợp nhất theo id (chuẩn mới)
-      try {
-        await upsertReels(r.channel_id, today, reels, "ext");
-        await recomputeChannelViews(r.channel_id, today);
-        ok++;
-      } catch { /* lỗi 1 kênh không chặn kênh khác */ }
-    } else {
-      // Extension bản cũ chỉ gửi tổng -> ghi thẳng total (tương thích ngược)
-      const { error } = await db.from("channel_snapshots").upsert(
-        { channel_id: r.channel_id, snapshot_date: today, total_views: Number(r.total_views) || 0, videos_count: Number(r.videos_count) || 0 },
-        { onConflict: "channel_id,snapshot_date" }
-      );
-      if (!error) ok++;
-    }
+    // LUÔN hợp nhất qua recompute (union 7 ngày + mốc cao nhất). KHÔNG ghi thẳng total_views từ extension:
+    // khi extension bắt hụt (reels rỗng, videos_count=1, total=0) mà ghi thẳng sẽ ĐÈ giá trị tốt về 0.
+    try {
+      if (reels.length) await upsertReels(r.channel_id, today, reels, "ext");
+      await recomputeChannelViews(r.channel_id, today);
+      ok++;
+    } catch { /* lỗi 1 kênh không chặn kênh khác */ }
   }
 
   // Chấm điểm lại NGAY sau khi có view/reel mới -> Sếp chỉ cần bấm extension, khỏi vào admin.
