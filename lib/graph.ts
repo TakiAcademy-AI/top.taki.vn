@@ -66,11 +66,14 @@ export async function scrapeFacebookGraph(
     page++;
   }
 
+  // Graph trả ĐỦ + CHÍNH XÁC mọi reel -> tính total THẲNG. KHÔNG ghi vào channel_reels: reel id của Graph
+  // (video id dạng số) KHÁC id scraping (story "Uzpf...") -> cùng reel nhưng khác id -> union sẽ CỘNG ĐÔI.
+  const totalViews = reels.reduce((s, r) => s + r.views, 0);
   const profile: NormalizedProfile = {
     ref: String(pageId),
     followers,
-    totalViews: null,   // để union reel quyết (upsertReels + recomputeChannelViews) -> nhất quán high-water
-    videosCount: null,
+    totalViews: reels.length ? totalViews : null,
+    videosCount: reels.length || null,
     engagement: null,   // giữ "talking about this" công khai cho nhất quán toàn giải
     bio: "",
     raw: { engine: "graph-api", name: meta.name ?? null, followers_count: meta.followers_count ?? null, reels: reels.length },

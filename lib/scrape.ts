@@ -636,9 +636,10 @@ export async function runGraphScrape(date: string): Promise<{ ok: number; total:
     try {
       const res = await scrapeFacebookGraph(pageId, ch.fb_token);
       if (!res) { errors.push({ username: ch.username, error: "không đọc được" }); continue; }
-      await saveProfile(ch, res.profile, date);          // ghi follower (high-water) + auto-verify nếu pending
-      if (res.reels.length) await upsertReels(ch.id, date, res.reels, "graph"); // reel chuẩn -> union GREATEST
-      await recomputeChannelViews(ch.id, date);          // total_views/videos_count từ union
+      // saveProfile ghi THẲNG follower + total_views + videos_count (graph đã đủ+chính xác, high-water trong ngày).
+      // KHÔNG upsert vào channel_reels (id graph khác id scraping -> cộng đôi). recompute lo mốc cao nhất qua ngày.
+      await saveProfile(ch, res.profile, date);
+      await recomputeChannelViews(ch.id, date);          // mốc cao nhất qua ngày (union scraping nếu có, else giữ số graph)
       ok++;
     } catch (e: any) {
       errors.push({ username: ch.username, error: String(e?.message ?? e).slice(0, 160) });
