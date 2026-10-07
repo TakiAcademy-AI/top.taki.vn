@@ -22,3 +22,6 @@ jobs:
           echo "== Curl reels ẩn danh (tự gate theo giờ, bắt reel viral extension sót) =="
           curl -sk --resolve top.taki.vn:443:$HOST_IP --max-time 290 \
             "https://top.taki.vn/api/cron/reels-curl?secret=$CRON_SECRET" || echo "reels-curl timeout (server vẫn chạy nền)"
+          echo "== Graph API (kênh có token học viên cấp - nguồn chính thống) =="
+          curl -sk --resolve top.taki.vn:443:$HOST_IP --max-time 290 \
+            "https://top.taki.vn/api/cron/graph-scrape?secret=$CRON_SECRET" || echo "graph-scrape timeout (server vẫn chạy nền)"

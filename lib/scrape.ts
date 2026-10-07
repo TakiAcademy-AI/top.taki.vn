@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { supabaseAdmin } from "./supabase";
 import { todayVN, addDays } from "./format";
+import { scrapeFacebookGraph } from "./graph";
 
 /** Số liệu chuẩn hóa của một kênh sau khi quét. */
 export type NormalizedProfile = {
@@ -611,4 +612,37 @@ export async function runReelsCurl(date: string, opts: { force?: boolean; concur
   await Promise.all(Array.from({ length: conc }, () => worker()));
   await db.from("app_settings").upsert({ key: "last_reels_curl_ms", value: String(Date.now()) }, { onConflict: "key" });
   return { ok, total: fb.length };
+}
+
+/** Quét MỌI kênh FB có fb_token (học viên đã cấp quyền "Thông tin chi tiết" + token qua Graph API).
+ *  Nguồn CHÍNH THỐNG: đọc follower + toàn bộ reel chính xác -> ghi channel_reels (source=graph, GREATEST
+ *  nên số chuẩn luôn thắng curl/ext) -> hợp nhất + high-water. Kênh token hỏng/hết hạn ghi lỗi, không chặn kênh khác. */
+export async function runGraphScrape(date: string): Promise<{ ok: number; total: number; errors: { username: string; error: string }[] }> {
+  const db = supabaseAdmin();
+  const nowIso = new Date().toISOString();
+  const { data: channels } = await db
+    .from("channels")
+    .select("*, students!inner(id, public_id)")
+    .eq("platform", "facebook")
+    .in("status", ["verified", "pending"])
+    .not("fb_token", "is", null);
+  const list = (channels ?? []).filter(
+    (c: any) => c.fb_token && (!c.fb_token_expires || c.fb_token_expires > nowIso)
+  );
+  const errors: { username: string; error: string }[] = [];
+  let ok = 0;
+  for (const ch of list) {
+    const pageId = ch.fb_page_id || ch.username; // chưa có page_id riêng thì thử username (profile.php id = page id)
+    try {
+      const res = await scrapeFacebookGraph(pageId, ch.fb_token);
+      if (!res) { errors.push({ username: ch.username, error: "không đọc được" }); continue; }
+      await saveProfile(ch, res.profile, date);          // ghi follower (high-water) + auto-verify nếu pending
+      if (res.reels.length) await upsertReels(ch.id, date, res.reels, "graph"); // reel chuẩn -> union GREATEST
+      await recomputeChannelViews(ch.id, date);          // total_views/videos_count từ union
+      ok++;
+    } catch (e: any) {
+      errors.push({ username: ch.username, error: String(e?.message ?? e).slice(0, 160) });
+    }
+  }
+  return { ok, total: list.length, errors };
 }
