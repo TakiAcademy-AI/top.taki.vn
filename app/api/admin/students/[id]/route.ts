@@ -19,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const { data: channels } = await db
     .from("channels")
-    .select("id, platform, url, username, status, baseline_followers, baseline_views, verified_at")
+    .select("id, platform, url, username, status, baseline_followers, baseline_views, verified_at, fb_page_id, fb_token, fb_token_expires")
     .eq("student_id", params.id)
     .order("created_at");
 
@@ -49,7 +49,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   return NextResponse.json({
     student,
-    channels: (channels ?? []).map((c) => ({ ...c, latest: latestByCh.get(c.id) ?? null })),
+    channels: (channels ?? []).map(({ fb_token, ...c }: any) => ({ ...c, has_token: !!fb_token, latest: latestByCh.get(c.id) ?? null })),
     participations: (parts ?? []).map((p: any) => ({
       campaign_id: p.campaign_id,
       campaign_name: p.campaigns?.name,

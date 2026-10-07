@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { Lane, LBRow, METRIC_LABEL, PF_ICON, ProfileModal, SiteHeader, useToast } from "@/components/ui";
 
 type Me = {
   student: { public_id: string; full_name: string; class_name: string | null };
-  channels: { id: string; platform: string; username: string; url: string; status: string; created_at: string }[];
+  channels: { id: string; platform: string; username: string; url: string; status: string; created_at: string; has_token?: boolean; fb_page_id?: string | null }[];
   stats: {
     followers7: number; views7: number; videos7: number;
     followers7prev: number; views7prev: number;
@@ -49,6 +49,36 @@ export default function DashboardPage() {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [detailRows, setDetailRows] = useState<any[] | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [tokenFor, setTokenFor] = useState<string | null>(null);         // kênh đang mở ô nhập token
+  const [tokenForm, setTokenForm] = useState({ page_id: "", token: "" });
+  const [savingToken, setSavingToken] = useState(false);
+
+  async function saveFbToken(channelId: string) {
+    if (!tokenForm.token.trim()) { toast("Dán token vào đã nhé"); return; }
+    setSavingToken(true);
+    toast("Đang kiểm tra token với Facebook…");
+    try {
+      const r = await fetch("/api/me/fb-token", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_id: channelId, page_id: tokenForm.page_id.trim(), token: tokenForm.token.trim() }),
+      });
+      const d = await r.json();
+      if (r.ok && d.ok) {
+        const p = d.preview;
+        toast(`✅ Kết nối thành công! ${fmt(p.followers ?? 0)} follower · ${p.reels} reel · ${fmt(p.total_reel_views)} view`);
+        setTokenFor(null); setTokenForm({ page_id: "", token: "" }); load();
+      } else toast(d.error ?? "Token không dùng được");
+    } finally { setSavingToken(false); }
+  }
+
+  async function removeFbToken(channelId: string) {
+    if (!confirm("Gỡ kết nối Facebook? Kênh sẽ quay lại cách đếm cũ (có thể thiếu/sai hơn).")) return;
+    const r = await fetch("/api/me/fb-token", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel_id: channelId }),
+    });
+    if (r.ok) { toast("Đã gỡ kết nối"); load(); }
+  }
 
   async function selfVerify(channelId: string) {
     setVerifyingId(channelId);
@@ -176,7 +206,8 @@ export default function DashboardPage() {
                     ].filter(Boolean).join(" · ")
                   : "chờ quét lần đầu";
                 return (
-                  <div className="chan" key={c.id}>
+                  <Fragment key={c.id}>
+                  <div className="chan">
                     <div className={`pf ${pf.cls}`}>{pf.icon}</div>
                     <div className="u">
                       <b>@{c.username}</b>
@@ -200,6 +231,37 @@ export default function DashboardPage() {
                       </>
                     )}
                   </div>
+                  {c.platform === "facebook" && (
+                    <div className="fb-connect">
+                      {c.has_token ? (
+                        <div className="fb-connected">
+                          <span>🟢 <b>Đã kết nối Facebook</b> — số liệu lấy chính xác qua Graph API</span>
+                          <button className="btn-ghost btn-sm" onClick={() => removeFbToken(c.id)}>Gỡ</button>
+                        </div>
+                      ) : tokenFor === c.id ? (
+                        <div className="fb-form">
+                          <p className="mini-note" style={{ margin: "0 0 6px" }}>
+                            Dán <b>Page access token</b> (và Page ID nếu có) để hệ thống đọc đúng số như trong Trang chuyên nghiệp của bạn.
+                          </p>
+                          <input className="inp" placeholder="Page ID (không bắt buộc)" value={tokenForm.page_id}
+                            onChange={(e) => setTokenForm((f) => ({ ...f, page_id: e.target.value }))} />
+                          <input className="inp" placeholder="Dán token vào đây" value={tokenForm.token}
+                            onChange={(e) => setTokenForm((f) => ({ ...f, token: e.target.value }))} style={{ marginTop: 6 }} />
+                          <div className="chan-acts" style={{ marginTop: 6 }}>
+                            <button className="btn btn-sm" disabled={savingToken} onClick={() => saveFbToken(c.id)}>
+                              {savingToken ? "Đang kiểm tra…" : "Lưu & kiểm tra"}
+                            </button>
+                            <button className="btn-ghost btn-sm" onClick={() => { setTokenFor(null); setTokenForm({ page_id: "", token: "" }); }}>Hủy</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button className="btn-ghost btn-sm" onClick={() => { setTokenFor(c.id); setTokenForm({ page_id: c.fb_page_id ?? "", token: "" }); }}>
+                          🔗 Kết nối Facebook để lấy số chính xác
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  </Fragment>
                 );
               })}
               {me.channels.some((c) => c.status === "pending") && (() => {

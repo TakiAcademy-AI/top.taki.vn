@@ -19,12 +19,17 @@ export async function GET() {
     .maybeSingle();
   if (!student) return jsonError("Không tìm thấy hồ sơ", 404);
 
-  const { data: channels } = await db
+  const { data: channelsRaw } = await db
     .from("channels")
-    .select("id, platform, url, username, status, baseline_followers, verified_at, created_at")
+    .select("id, platform, url, username, status, baseline_followers, verified_at, created_at, fb_page_id, fb_token, fb_token_expires")
     .eq("student_id", sid)
     .neq("status", "removed")
     .order("created_at");
+  // Không lộ token ra client — chỉ trả trạng thái đã kết nối hay chưa.
+  const channels = (channelsRaw ?? []).map(({ fb_token, ...c }: any) => ({
+    ...c,
+    has_token: !!fb_token,
+  }));
 
   // Chỉ số 7 ngày so với 7 ngày trước đó, gộp mọi kênh verified
   const chIds = (channels ?? []).filter((c) => c.status === "verified").map((c) => c.id);

@@ -109,6 +109,9 @@ export default function AdminPage() {
   const [profile, setProfile] = useState<any | null>(null);
   const [scrape, setScrape] = useState<any | null>(null);
   const [scrapeBusy, setScrapeBusy] = useState(false);
+  const [tokenFor, setTokenFor] = useState<string | null>(null);
+  const [tokenForm, setTokenForm] = useState({ page_id: "", token: "" });
+  const [savingToken, setSavingToken] = useState(false);
   // Ngày muốn tính điểm lại. Mặc định hôm nay; đổi sang ngày cũ để bù điểm cho ngày
   // kênh bị gắn cờ oan hoặc quét lỗi. Job tính điểm idempotent theo ngày nên chạy lại an toàn.
   const [scoreDate, setScoreDate] = useState(() =>
@@ -376,6 +379,30 @@ export default function AdminPage() {
     const r = await fetch(`/api/admin/channels/${chId}`, { method: "PATCH" });
     if (r.ok) { toast("Đã khôi phục kênh — chờ xác minh lại"); openProfile(profile.student.id); loadStudents(q); }
     else toast((await r.json()).error ?? "Lỗi");
+  }
+
+  async function saveFbToken(chId: string) {
+    if (!tokenForm.token.trim()) { toast("Dán token vào đã"); return; }
+    setSavingToken(true);
+    toast("Đang kiểm tra token với Facebook…");
+    try {
+      const r = await fetch(`/api/admin/channels/${chId}/token`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page_id: tokenForm.page_id.trim(), token: tokenForm.token.trim() }),
+      });
+      const d = await r.json();
+      if (r.ok && d.ok) {
+        const p = d.preview;
+        toast(`✅ Kết nối OK! ${fmt(p.followers ?? 0)} follower · ${p.reels} reel · ${fmt(p.total_reel_views)} view`);
+        setTokenFor(null); setTokenForm({ page_id: "", token: "" }); openProfile(profile.student.id);
+      } else toast(d.error ?? "Token không dùng được");
+    } finally { setSavingToken(false); }
+  }
+
+  async function removeFbToken(chId: string) {
+    if (!confirm("Gỡ kết nối Facebook của kênh này?")) return;
+    const r = await fetch(`/api/admin/channels/${chId}/token`, { method: "DELETE" });
+    if (r.ok) { toast("Đã gỡ kết nối"); openProfile(profile.student.id); }
   }
 
   async function toggleLock() {
@@ -972,6 +999,33 @@ export default function AdminPage() {
                     )}
                     <button className="btn-ghost btn-sm btn-danger" onClick={() => removeChannel(c.id, c.username)}>Gỡ kênh</button>
                   </>
+                )}
+                {c.platform === "facebook" && c.status !== "removed" && (
+                  <div className="fb-connect" style={{ flexBasis: "100%", margin: "4px 0 0" }}>
+                    {c.has_token ? (
+                      <div className="fb-connected">
+                        <span>🟢 <b>Đã kết nối Graph API</b> — số lấy chính xác từ token</span>
+                        <button className="btn-ghost btn-sm" onClick={() => removeFbToken(c.id)}>Gỡ token</button>
+                      </div>
+                    ) : tokenFor === c.id ? (
+                      <div className="fb-form">
+                        <input className="inp" placeholder="Page ID (không bắt buộc)" value={tokenForm.page_id}
+                          onChange={(e) => setTokenForm((f) => ({ ...f, page_id: e.target.value }))} />
+                        <input className="inp" placeholder="Dán Page access token" value={tokenForm.token}
+                          onChange={(e) => setTokenForm((f) => ({ ...f, token: e.target.value }))} style={{ marginTop: 6 }} />
+                        <div className="chan-acts" style={{ marginTop: 6 }}>
+                          <button className="btn btn-sm" disabled={savingToken} onClick={() => saveFbToken(c.id)}>
+                            {savingToken ? "Đang kiểm tra…" : "Lưu & kiểm tra"}
+                          </button>
+                          <button className="btn-ghost btn-sm" onClick={() => { setTokenFor(null); setTokenForm({ page_id: "", token: "" }); }}>Hủy</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="btn-ghost btn-sm" onClick={() => { setTokenFor(c.id); setTokenForm({ page_id: c.fb_page_id ?? "", token: "" }); }}>
+                        🔗 Gắn token Facebook (số chính xác)
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
