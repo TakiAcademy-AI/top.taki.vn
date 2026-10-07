@@ -23,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const targetId = pageId || ch.username;
   // Đọc thử TRƯỚC khi lưu -> token sai thì báo lỗi, không lưu rác.
-  let preview: { followers: number | null; reels: number; total_reel_views: number } | null = null;
+  let preview: { followers: number | null; reels: number; total_reel_views: number; engagement: number | null } | null = null;
   try {
     const res = await scrapeFacebookGraph(targetId, token);
     if (!res) return jsonError("Token hợp lệ nhưng không đọc được dữ liệu kênh");
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       followers: res.profile.followers,
       reels: res.reels.length,
       total_reel_views: res.reels.reduce((s, r) => s + r.views, 0),
+      engagement: res.profile.engagement,
     };
   } catch (e: any) {
     return jsonError(`Token không đọc được: ${String(e?.message ?? e).slice(0, 160)}`, 400);

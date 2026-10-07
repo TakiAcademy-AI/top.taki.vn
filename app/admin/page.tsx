@@ -393,7 +393,7 @@ export default function AdminPage() {
       const d = await r.json();
       if (r.ok && d.ok) {
         const p = d.preview;
-        toast(`✅ Kết nối OK! ${fmt(p.followers ?? 0)} follower · ${p.reels} reel · ${fmt(p.total_reel_views)} view`);
+        toast(`✅ Kết nối OK! ${fmt(p.followers ?? 0)} follower · ${p.reels} reel · ${fmt(p.total_reel_views)} view · ${fmt(p.engagement ?? 0)} tương tác`);
         setTokenFor(null); setTokenForm({ page_id: "", token: "" }); openProfile(profile.student.id);
       } else toast(d.error ?? "Token không dùng được");
     } finally { setSavingToken(false); }

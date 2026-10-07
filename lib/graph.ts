@@ -47,6 +47,15 @@ export async function scrapeFacebookGraph(
   const meta = await graphGet(`${pageId}?fields=name,followers_count,fan_count`, token);
   const followers = toNum(meta.followers_count) ?? toNum(meta.fan_count);
 
+  // 1b) Tương tác = page_post_engagements (28 ngày, giá trị mới nhất) — KHỚP "Lượt tương tác" dashboard FB.
+  //     Lỗi insights thì để null (giữ "talking about this" công khai). Chỉ số cuộn -> saveProfile giữ đỉnh.
+  let engagement: number | null = null;
+  try {
+    const ins = await graphGet(`${pageId}/insights?metric=page_post_engagements&period=days_28`, token);
+    const vals = ins?.data?.[0]?.values;
+    if (Array.isArray(vals) && vals.length) engagement = toNum(vals[vals.length - 1]?.value);
+  } catch { /* không có quyền insights / lỗi -> null, giữ số cũ */ }
+
   // 2) TẤT CẢ reel: phân trang hết (limit 100/trang), gom {id, views}. Reel là nguồn view chuẩn nhất.
   const reels: ReelView[] = [];
   let next: string | null = `${pageId}/video_reels?fields=id,views,post_views,blue_reels_play_count&limit=100`;
@@ -74,9 +83,9 @@ export async function scrapeFacebookGraph(
     followers,
     totalViews: reels.length ? totalViews : null,
     videosCount: reels.length || null,
-    engagement: null,   // giữ "talking about this" công khai cho nhất quán toàn giải
+    engagement,         // page_post_engagements 28 ngày (khớp dashboard) cho kênh có token; else null -> giữ số cũ
     bio: "",
-    raw: { engine: "graph-api", name: meta.name ?? null, followers_count: meta.followers_count ?? null, reels: reels.length },
+    raw: { engine: "graph-api", name: meta.name ?? null, followers_count: meta.followers_count ?? null, reels: reels.length, engagement },
   };
   return { profile, reels };
 }

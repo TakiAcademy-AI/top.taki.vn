@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (ch.platform !== "facebook") return jsonError("Chỉ áp dụng cho kênh Facebook");
 
   const targetId = pageId || ch.username;
-  let preview: { followers: number | null; reels: number; total_reel_views: number } | null = null;
+  let preview: { followers: number | null; reels: number; total_reel_views: number; engagement: number | null } | null = null;
   try {
     const res = await scrapeFacebookGraph(targetId, token);
     if (!res) return jsonError("Token hợp lệ nhưng không đọc được dữ liệu kênh");
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
       followers: res.profile.followers,
       reels: res.reels.length,
       total_reel_views: res.reels.reduce((s, r) => s + r.views, 0),
+      engagement: res.profile.engagement,
     };
   } catch (e: any) {
     return jsonError(`Token không đọc được: ${String(e?.message ?? e).slice(0, 160)}`, 400);
