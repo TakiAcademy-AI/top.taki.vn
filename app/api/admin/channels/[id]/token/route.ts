@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireAdmin, jsonError } from "@/lib/api";
 import { scrapeFacebookGraph } from "@/lib/graph";
+import { graphScrapeChannel } from "@/lib/scrape";
+import { runDailyScoring } from "@/lib/scoring";
+import { todayVN } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -43,6 +46,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .update({ fb_page_id: pageId || null, fb_token: token, fb_token_expires: expires })
     .eq("id", ch.id);
   if (error) return jsonError("Không lưu được token", 500);
+
+  // Quét + chấm điểm NGAY để số cập nhật tức thì (khỏi chờ cron 30').
+  const date = todayVN();
+  try { await graphScrapeChannel(ch.id, date); await runDailyScoring(date); } catch { /* không chặn việc lưu token */ }
 
   return NextResponse.json({ ok: true, channel: ch.username, preview });
 }

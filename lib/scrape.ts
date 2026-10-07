@@ -632,18 +632,36 @@ export async function runGraphScrape(date: string): Promise<{ ok: number; total:
   const errors: { username: string; error: string }[] = [];
   let ok = 0;
   for (const ch of list) {
-    const pageId = ch.fb_page_id || ch.username; // chưa có page_id riêng thì thử username (profile.php id = page id)
     try {
-      const res = await scrapeFacebookGraph(pageId, ch.fb_token);
-      if (!res) { errors.push({ username: ch.username, error: "không đọc được" }); continue; }
-      // saveProfile ghi THẲNG follower + total_views + videos_count (graph đã đủ+chính xác, high-water trong ngày).
-      // KHÔNG upsert vào channel_reels (id graph khác id scraping -> cộng đôi). recompute lo mốc cao nhất qua ngày.
-      await saveProfile(ch, res.profile, date);
-      await recomputeChannelViews(ch.id, date);          // mốc cao nhất qua ngày (union scraping nếu có, else giữ số graph)
+      await graphScrapeOne(ch, date);
       ok++;
     } catch (e: any) {
       errors.push({ username: ch.username, error: String(e?.message ?? e).slice(0, 160) });
     }
   }
   return { ok, total: list.length, errors };
+}
+
+/** Quét 1 kênh qua Graph (dùng chung cho cron + lúc vừa gắn token). ch cần có fb_token (+ fb_page_id/username). */
+async function graphScrapeOne(ch: any, date: string): Promise<void> {
+  const pageId = ch.fb_page_id || ch.username; // chưa có page_id riêng thì thử username (profile.php id = page id)
+  const res = await scrapeFacebookGraph(pageId, ch.fb_token);
+  if (!res) throw new Error("không đọc được");
+  // saveProfile ghi THẲNG follower + total_views + videos_count + engagement (graph đủ+chính xác, high-water).
+  // KHÔNG upsert vào channel_reels (id graph khác id scraping -> cộng đôi). recompute lo mốc cao nhất qua ngày.
+  await saveProfile(ch, res.profile, date);
+  await recomputeChannelViews(ch.id, date);
+}
+
+/** Quét NGAY 1 kênh theo id (gọi sau khi vừa gắn token để số cập nhật tức thì, khỏi chờ cron). */
+export async function graphScrapeChannel(channelId: string, date: string): Promise<boolean> {
+  const db = supabaseAdmin();
+  const { data: ch } = await db
+    .from("channels")
+    .select("*, students!inner(id, public_id)")
+    .eq("id", channelId)
+    .maybeSingle();
+  if (!ch?.fb_token) return false;
+  await graphScrapeOne(ch, date);
+  return true;
 }
