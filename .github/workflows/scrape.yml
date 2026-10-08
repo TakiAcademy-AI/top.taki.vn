@@ -2,6 +2,10 @@ name: Quét dữ liệu mỗi 30 phút
 on:
   schedule:
     - cron: '*/30 * * * *'   # mỗi 30 phút (giờ UTC; GitHub có thể trễ 5-15p)
+    # Quét CHỐT cuối cuộc đua "MINH TRÍ 30 NGÀY" (kết thúc 23:59 ngày 10/10 giờ VN = 16:59 UTC).
+    # Đặt 2 mốc sát giờ để có lần chấm điểm cuối gần 23:59 nhất mà không lố qua 0h (chấm điểm dừng từ 11/10).
+    - cron: '45 16 10 10 *'  # 23:45 VN 10/10 (an toàn, gần như chắc chắn trước nửa đêm)
+    - cron: '53 16 10 10 *'  # 23:53 VN 10/10 (sát 23:59 nhất)
   workflow_dispatch: {}        # cho phép bấm chạy tay
 jobs:
   scrape:
