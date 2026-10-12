@@ -31,6 +31,25 @@ export async function GET(req: NextRequest) {
     .select("student_id, total_score, current_rank, students!inner(public_id, full_name, classes(name))")
     .eq("campaign_id", campaignId);
 
+  // Link kênh (verified) của từng học viên — gộp nếu có nhiều kênh.
+  const studentIds = (parts ?? []).map((p: any) => p.student_id);
+  const linksByStudent = new Map<string, string[]>();
+  if (studentIds.length) {
+    const { data: chans } = await db
+      .from("channels")
+      .select("student_id, platform, username, url")
+      .in("student_id", studentIds)
+      .eq("status", "verified");
+    for (const c of chans ?? []) {
+      const link = c.url
+        || (c.platform === "tiktok" ? `https://www.tiktok.com/@${String(c.username).replace(/^@/, "")}`
+          : /^\d+$/.test(c.username) ? `https://www.facebook.com/profile.php?id=${c.username}`
+          : `https://www.facebook.com/${c.username}`);
+      if (!linksByStudent.has(c.student_id)) linksByStudent.set(c.student_id, []);
+      linksByStudent.get(c.student_id)!.push(link);
+    }
+  }
+
   const entries = await fetchAllEntries(db, campaignId, "student_id, metric, points");
   const byStudent = new Map<string, Record<string, number>>();
   for (const e of entries ?? []) {
@@ -46,6 +65,7 @@ export async function GET(req: NextRequest) {
     { header: "ID", key: "id", width: 14 },
     { header: "Họ tên", key: "name", width: 26 },
     { header: "Lớp", key: "class", width: 24 },
+    { header: "Link kênh", key: "links", width: 42 },
     ...METRIC_COLS.map(([key, header]) => ({ header, key, width: 18 })),
     { header: "Tổng điểm", key: "total", width: 14 },
   ];
@@ -61,10 +81,13 @@ export async function GET(req: NextRequest) {
       id: p.students.public_id,
       name: p.students.full_name,
       class: p.students.classes?.name ?? "",
+      links: (linksByStudent.get(p.student_id) ?? []).join("\n"),
       ...Object.fromEntries(METRIC_COLS.map(([k]) => [k, Math.round((sums[k] ?? 0) * 100) / 100])),
       total: Number(p.total_score),
     });
   }
+  // Xuống dòng cho ô nhiều link dễ đọc.
+  ws.getColumn("links").alignment = { wrapText: true, vertical: "top" };
 
   const buf = await wb.xlsx.writeBuffer();
   const fileName = `bang-xep-hang-${camp.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-")}.xlsx`;
