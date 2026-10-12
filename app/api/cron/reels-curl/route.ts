@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronSecret, jsonError } from "@/lib/api";
 import { runReelsCurl } from "@/lib/scrape";
-import { runDailyScoring } from "@/lib/scoring";
+import { runDailyScoring, hasActiveCampaign } from "@/lib/scoring";
 import { todayVN } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,8 @@ export async function GET(req: NextRequest) {
   if (!checkCronSecret(req)) return jsonError("Sai secret", 401);
   const force = new URL(req.url).searchParams.get("force") === "1";
   const date = todayVN();
+  if (!force && !(await hasActiveCampaign(date)))
+    return NextResponse.json({ skipped: "không có cuộc thi đang chạy" });
   const res = await runReelsCurl(date, { force });
   let scored = 0;
   if (!res.skipped && res.ok > 0) {

@@ -288,3 +288,17 @@ export async function recomputeRanks(campaignId: string, date: string): Promise<
     if (error) throw error;
   }
 }
+
+/** Có cuộc thi nào ĐANG chạy không (status=running, trong khoảng ngày)? Dùng để quét TỰ DỪNG khi hết thi,
+ *  TỰ CHẠY LẠI khi có cuộc thi mới — khỏi phí proxy/Graph API quét vô ích lúc không có giải nào. */
+export async function hasActiveCampaign(date: string): Promise<boolean> {
+  const db = supabaseAdmin();
+  const { data } = await db
+    .from("campaigns")
+    .select("id")
+    .eq("status", "running")
+    .lte("start_date", date)
+    .gte("end_date", date)
+    .limit(1);
+  return (data?.length ?? 0) > 0;
+}
