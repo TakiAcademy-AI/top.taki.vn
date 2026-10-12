@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { checkCronSecret, jsonError } from "@/lib/api";
 import { todayVN } from "@/lib/format";
-import { runDailyScoring } from "@/lib/scoring";
+import { runDailyScoring, hasActiveCampaign } from "@/lib/scoring";
 import { upsertReels, recomputeChannelViews, type ReelView } from "@/lib/scrape";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +16,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const results: any[] = Array.isArray(body?.results) ? body.results : [];
   if (!results.length) return NextResponse.json({ ok: 0 });
+  // Hết cuộc thi -> không ghi số extension gửi (phòng hờ extension còn chạy với list cũ).
+  if (!(await hasActiveCampaign(todayVN()))) return NextResponse.json({ skipped: "không có cuộc thi đang chạy" });
 
   const db = supabaseAdmin();
   const today = todayVN();

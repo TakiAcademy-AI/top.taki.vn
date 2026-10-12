@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { checkCronSecret, jsonError } from "@/lib/api";
+import { hasActiveCampaign } from "@/lib/scoring";
+import { todayVN } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,8 @@ export const dynamic = "force-dynamic";
  *  thật tự qua WAF SlardarWAF mà curl không qua được). Trả kèm `platform` để extension xử lý đúng loại. */
 export async function GET(req: NextRequest) {
   if (!checkCronSecret(req)) return jsonError("Sai secret", 401);
+  // Không có cuộc thi đang chạy -> trả danh sách RỖNG để extension khỏi quét (tự nghỉ, khỏi tắt tay).
+  if (!(await hasActiveCampaign(todayVN()))) return NextResponse.json({ channels: [] });
   const db = supabaseAdmin();
   const { data } = await db
     .from("channels")
