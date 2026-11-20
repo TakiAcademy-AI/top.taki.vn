@@ -94,8 +94,13 @@ const STATUS_PILL: Record<string, [string, string]> = {
 export default function AdminPage() {
   const { toast, toastNode } = useToast();
   const [authed, setAuthed] = useState<boolean | null>(null);
+  const [account, setAccount] = useState("");
   const [password, setPassword] = useState("");
-  const [tab, setTab] = useState<"camp" | "new" | "students" | "bxh" | "scrape">("camp");
+  const [tab, setTab] = useState<"camp" | "new" | "students" | "bxh" | "scrape" | "pwd">("camp");
+  const [stClassId, setStClassId] = useState("");                 // lọc học viên theo lớp
+  const [stClasses, setStClasses] = useState<{ id: string; name: string; is_active: boolean }[]>([]);
+  const [pw, setPw] = useState({ current: "", next: "", confirm: "" }); // đổi mật khẩu
+  const [pwBusy, setPwBusy] = useState(false);
 
   const [stats, setStats] = useState({ running: 0, students: 0, channels: 0 });
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -126,7 +131,7 @@ export default function AdminPage() {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addChan),
     });
     const d = await r.json();
-    if (r.ok) { toast("Đã thêm kênh cho học viên"); setAddChan(null); openProfile(profile.student.id); loadStudents(q); }
+    if (r.ok) { toast("Đã thêm kênh cho học viên"); setAddChan(null); openProfile(profile.student.id); loadStudents(q, stClassId); }
     else toast(d.error ?? "Không thêm được kênh");
   }
 
@@ -167,12 +172,12 @@ export default function AdminPage() {
     fetch("/api/platforms").then((r) => r.json()).then((d) => setPlatforms(d.platforms ?? [])).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadStudents = useCallback(async (query: string) => {
-    const r = await fetch(`/api/admin/students?q=${encodeURIComponent(query)}`);
-    if (r.ok) setStudents((await r.json()).students);
+  const loadStudents = useCallback(async (query: string, classId: string) => {
+    const r = await fetch(`/api/admin/students?q=${encodeURIComponent(query)}${classId ? `&class_id=${classId}` : ""}`);
+    if (r.ok) { const d = await r.json(); setStudents(d.students); if (d.classes) setStClasses(d.classes); }
   }, []);
 
-  useEffect(() => { if (authed && tab === "students") loadStudents(q); }, [authed, tab, q, loadStudents]);
+  useEffect(() => { if (authed && tab === "students") loadStudents(q, stClassId); }, [authed, tab, q, stClassId, loadStudents]);
   useEffect(() => {
     if (authed && tab === "bxh" && lbCampId) {
       fetch(`/api/leaderboard?campaign_id=${lbCampId}&detail=1`)
@@ -223,10 +228,25 @@ export default function AdminPage() {
   async function login() {
     const r = await fetch("/api/admin/login", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ account, password }),
     });
     if (r.ok) { setAuthed(true); loadCampaigns(); }
-    else toast((await r.json()).error ?? "Sai mật khẩu");
+    else toast((await r.json()).error ?? "Sai tài khoản hoặc mật khẩu");
+  }
+
+  async function changePassword() {
+    if (pw.next.length < 6) { toast("Mật khẩu mới phải từ 6 ký tự"); return; }
+    if (pw.next !== pw.confirm) { toast("Mật khẩu mới nhập lại không khớp"); return; }
+    setPwBusy(true);
+    try {
+      const r = await fetch("/api/admin/password", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current: pw.current, new: pw.next }),
+      });
+      const d = await r.json();
+      if (r.ok && d.ok) { toast("✅ Đã đổi mật khẩu admin"); setPw({ current: "", next: "", confirm: "" }); }
+      else toast(d.error ?? "Không đổi được mật khẩu");
+    } finally { setPwBusy(false); }
   }
 
   async function createClass() {
@@ -363,7 +383,7 @@ export default function AdminPage() {
     if (r.ok) {
       const fl = d.baseline_followers != null ? Number(d.baseline_followers).toLocaleString("vi-VN") : "—";
       toast(`Đã xác minh · mốc gốc ${fl} follower (${d.source ?? "—"})`);
-      openProfile(profile.student.id); loadStudents(q);
+      openProfile(profile.student.id); loadStudents(q, stClassId);
     } else toast(d.error ?? "Lỗi");
   }
 
@@ -371,13 +391,13 @@ export default function AdminPage() {
     const reason = prompt(`Gỡ kênh @${username}? Kênh sẽ ẩn khỏi hệ thống và ngừng tính điểm (lịch sử vẫn giữ).\nNhập lý do (bắt buộc):`);
     if (!reason) return;
     const r = await fetch(`/api/admin/channels/${chId}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
-    if (r.ok) { toast("Đã gỡ kênh"); openProfile(profile.student.id); loadStudents(q); }
+    if (r.ok) { toast("Đã gỡ kênh"); openProfile(profile.student.id); loadStudents(q, stClassId); }
     else toast((await r.json()).error ?? "Lỗi");
   }
 
   async function restoreChannel(chId: string) {
     const r = await fetch(`/api/admin/channels/${chId}`, { method: "PATCH" });
-    if (r.ok) { toast("Đã khôi phục kênh — chờ xác minh lại"); openProfile(profile.student.id); loadStudents(q); }
+    if (r.ok) { toast("Đã khôi phục kênh — chờ xác minh lại"); openProfile(profile.student.id); loadStudents(q, stClassId); }
     else toast((await r.json()).error ?? "Lỗi");
   }
 
@@ -423,7 +443,7 @@ export default function AdminPage() {
     if (!reason?.trim()) return;
     const r = await fetch(`/api/admin/students/${s.id}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
     const d = await r.json();
-    if (r.ok) { toast(`Đã xóa hồ sơ ${s.public_id}`); setProfile(null); loadStudents(q); }
+    if (r.ok) { toast(`Đã xóa hồ sơ ${s.public_id}`); setProfile(null); loadStudents(q, stClassId); }
     else toast(d.error ?? "Không xóa được");
   }
 
@@ -448,8 +468,13 @@ export default function AdminPage() {
           <div className="card">
             <h3>🔐 Đăng nhập admin</h3>
             <div className="field">
+              <label>Tài khoản</label>
+              <input type="text" placeholder="ai@taki.vn" autoComplete="username" value={account}
+                onChange={(e) => setAccount(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} />
+            </div>
+            <div className="field">
               <label>Mật khẩu</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && login()} />
             </div>
             <button className="btn" onClick={login}>Đăng nhập</button>
@@ -473,6 +498,7 @@ export default function AdminPage() {
           <button className={tab === "students" ? "on" : ""} onClick={() => setTab("students")}>Học viên</button>
           <button className={tab === "bxh" ? "on" : ""} onClick={() => setTab("bxh")}>Bảng xếp hạng</button>
           <button className={tab === "scrape" ? "on" : ""} onClick={() => setTab("scrape")}>Quét dữ liệu</button>
+          <button className={tab === "pwd" ? "on" : ""} onClick={() => setTab("pwd")}>🔑 Mật khẩu</button>
         </div>
 
         {tab === "camp" && (
@@ -623,7 +649,11 @@ export default function AdminPage() {
           <div className="card">
             <h3>
               👥 Học viên đã đăng ký
-              <input placeholder="Tìm theo tên, ID, SĐT…" style={{ maxWidth: 240, marginLeft: "auto" }}
+              <select style={{ maxWidth: 220, marginLeft: "auto" }} value={stClassId} onChange={(e) => setStClassId(e.target.value)}>
+                <option value="">Tất cả lớp</option>
+                {stClasses.map((c) => <option key={c.id} value={c.id}>{c.name}{c.is_active ? "" : " (ẩn)"}</option>)}
+              </select>
+              <input placeholder="Tìm theo tên, ID, SĐT…" style={{ maxWidth: 220, marginLeft: 8 }}
                 value={q} onChange={(e) => setQ(e.target.value)} />
             </h3>
             <div className="table-scroll">
@@ -652,6 +682,32 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {tab === "pwd" && (
+          <div className="card" style={{ maxWidth: 460 }}>
+            <h3>🔑 Đổi mật khẩu admin</h3>
+            <p className="mini-note" style={{ marginBottom: 10 }}>Tài khoản đăng nhập: <b>ai@taki.vn</b></p>
+            <div className="field">
+              <label>Mật khẩu hiện tại</label>
+              <input type="password" autoComplete="current-password" value={pw.current}
+                onChange={(e) => setPw((p) => ({ ...p, current: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Mật khẩu mới (≥ 6 ký tự)</label>
+              <input type="password" autoComplete="new-password" value={pw.next}
+                onChange={(e) => setPw((p) => ({ ...p, next: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Nhập lại mật khẩu mới</label>
+              <input type="password" autoComplete="new-password" value={pw.confirm}
+                onChange={(e) => setPw((p) => ({ ...p, confirm: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && changePassword()} />
+            </div>
+            <button className="btn" disabled={pwBusy} onClick={changePassword}>
+              {pwBusy ? "Đang đổi…" : "Đổi mật khẩu"}
+            </button>
           </div>
         )}
 

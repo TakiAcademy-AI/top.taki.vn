@@ -43,7 +43,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Danh sách lớp (cả inactive) để admin lọc học viên theo mùa.
+  const { data: allClasses } = await db
+    .from("classes").select("id, name, is_active").order("name");
+
   return NextResponse.json({
+    classes: allClasses ?? [],
     students: (students ?? []).map((s: any) => {
       const chans = chByStudent.get(s.id) ?? [];
       return {

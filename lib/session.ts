@@ -13,6 +13,11 @@ function secret(): string {
   return process.env.SESSION_SECRET || "dev-secret-doi-truoc-khi-chay-that";
 }
 
+/** Băm mật khẩu admin (HMAC-SHA256 theo SESSION_SECRET) để lưu trong app_settings.admin_password_hash. */
+export function adminPwHash(pw: string): string {
+  return crypto.createHmac("sha256", secret()).update("admin:" + pw).digest("hex");
+}
+
 export function signToken(payload: Session): string {
   const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const sig = crypto.createHmac("sha256", secret()).update(data).digest("base64url");
