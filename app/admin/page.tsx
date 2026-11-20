@@ -234,6 +234,12 @@ export default function AdminPage() {
     else toast((await r.json()).error ?? "Sai tài khoản hoặc mật khẩu");
   }
 
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    setAuthed(false);
+    setPassword(""); setAccount("");
+  }
+
   async function changePassword() {
     if (pw.next.length < 6) { toast("Mật khẩu mới phải từ 6 ký tự"); return; }
     if (pw.next !== pw.confirm) { toast("Mật khẩu mới nhập lại không khớp"); return; }
@@ -490,7 +496,12 @@ export default function AdminPage() {
 
   return (
     <>
-      <SiteHeader subtitle="BẢNG ĐIỀU KHIỂN ADMIN" right={<span>Admin · TAKI ACADEMY</span>} />
+      <SiteHeader subtitle="BẢNG ĐIỀU KHIỂN ADMIN" right={
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span>ai@taki.vn</span>
+          <button className="btn-ghost btn-sm" onClick={logout}>Đăng xuất</button>
+        </span>
+      } />
       <div className="wrap">
         <div className="tabs">
           <button className={tab === "camp" ? "on" : ""} onClick={() => { setTab("camp"); loadCampaigns(); }}>Chiến dịch</button>
