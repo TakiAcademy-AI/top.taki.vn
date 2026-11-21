@@ -31,7 +31,7 @@ export type NormalizedProfile = {
  *  - Facebook: followers thật + bio=chuỗi giới thiệu trang
  *            totalViews/videosCount/engagement=null (chế độ ẩn danh chỉ đọc được bài mới nhất)
  *  - YouTube: followers=subscriberCount · totalViews=viewCount (tổng view cả kênh)
- *            videosCount=videoCount · engagement=null (YT không có chỉ số tương đương "talking about this")
+ *            videosCount=videoCount · engagement=TỔNG like+comment mọi video (crawl riêng, có cổng giờ)
  */
 
 const pexec = promisify(execFile);
@@ -532,8 +532,15 @@ const YT_CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/i;
  *
  * Kênh bật "ẩn số người đăng ký": API trả hiddenSubscriberCount=true → followers=null, vẫn ghi
  * tổng view + số video bình thường (saveProfile giữ số tốt gần nhất cho follower).
+ *
+ * opts.withEngagement = chạy thêm lượt đếm TƯƠNG TÁC (tổng like+comment mọi video) — xem
+ * ytSumEngagement. Tốn thêm hạn mức nên lượt quét 30 phút chỉ bật theo cổng giờ (ytEngagementDue),
+ * còn học viên/admin bấm xác minh tay thì luôn bật (1 kênh, ~3 đơn vị).
  */
-export async function scrapeYouTubeChannel(username: string): Promise<NormalizedProfile | null> {
+export async function scrapeYouTubeChannel(
+  username: string,
+  opts: { withEngagement?: boolean } = {},
+): Promise<NormalizedProfile | null> {
   const key = await getYouTubeApiKey();
   if (!key) throw new Error("chưa có YouTube API key — điền app_settings.youtube_api_key");
 
@@ -547,7 +554,7 @@ export async function scrapeYouTubeChannel(username: string): Promise<Normalized
   let lastErr = "";
   for (const q of attempts) {
     const res = await fetch(
-      `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&${q}&key=${key}`,
+      `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&${q}&key=${key}`,
       { cache: "no-store" },
     );
     const body: any = await res.json().catch(() => null);
@@ -567,18 +574,114 @@ export async function scrapeYouTubeChannel(username: string): Promise<Normalized
 
   const st = item.statistics ?? {};
   const hidden = st.hiddenSubscriberCount === true;
+
+  // Tương tác: KHÔNG để lỗi ở đây làm hỏng cả lần quét — số follower/view vẫn phải được ghi.
+  // Lỗi (hết hạn mức, kênh ẩn playlist...) chỉ ghi vào raw để admin xem, engagement để null ->
+  // saveProfile giữ mốc đỉnh cũ, điểm không tụt.
+  let engagement: number | null = null;
+  let engInfo: unknown = opts.withEngagement ? "uploads-playlist-không-có" : "bỏ-qua-theo-cổng-giờ";
+  const uploads = item.contentDetails?.relatedPlaylists?.uploads;
+  if (opts.withEngagement && uploads) {
+    try {
+      const sum = await ytSumEngagement(key, String(uploads));
+      engagement = sum.engagement;
+      engInfo = { videos: sum.videos, units: sum.units, capped: sum.capped };
+    } catch (e: any) {
+      engInfo = { error: String(e?.message ?? e).slice(0, 200) };
+    }
+  }
+
   return {
     ref: String(item.snippet?.customUrl ?? item.id ?? username).replace(/^@/, "").toLowerCase(),
     followers: hidden ? null : num(st.subscriberCount),
     totalViews: num(st.viewCount),
     videosCount: num(st.videoCount),
-    engagement: null,
+    engagement,
     bio: String(item.snippet?.description ?? ""),
-    raw: { engine: "youtube-api", id: item.id, statistics: st, hiddenSubscriberCount: hidden },
+    raw: { engine: "youtube-api", id: item.id, statistics: st, hiddenSubscriberCount: hidden, engagement: engInfo },
   };
 }
 
-const SCRAPERS: Record<string, (username: string) => Promise<NormalizedProfile | null>> = {
+/** Số trang video tối đa mỗi lượt đếm tương tác: 12 × 50 = 600 video MỚI NHẤT. Chặn trần để 1 kênh
+ *  nghìn video không ngốn hết hạn mức (kênh học viên thường < 50 video = 1 trang). Kênh vượt trần thì
+ *  thiếu phần video cũ, nhưng saveProfile giữ mốc đỉnh nên điểm không tụt. */
+const YT_MAX_PAGES = 12;
+
+/**
+ * Tổng TƯƠNG TÁC của kênh YouTube = Σ (likeCount + commentCount) mọi video, qua playlist "uploads".
+ * Hạn mức: 1 đơn vị/trang playlistItems + 1 đơn vị/50 video videos.list ⇒ kênh ≤50 video tốn 2 đơn vị
+ * (cộng 1 của channels.list = 3). Kênh tắt like/tắt bình luận thì API bỏ trường đó -> tính 0.
+ * Chỉ số CỘNG DỒN (chỉ tăng), khớp mô hình điểm: delta ngày = tương tác kiếm thêm được trong ngày.
+ */
+async function ytSumEngagement(
+  key: string,
+  uploadsPlaylist: string,
+): Promise<{ engagement: number; videos: number; units: number; capped: boolean }> {
+  let engagement = 0;
+  let videos = 0;
+  let units = 0;
+  let pageToken = "";
+  let capped = false;
+
+  for (let page = 0; ; page++) {
+    if (page >= YT_MAX_PAGES) {
+      capped = true;
+      break;
+    }
+    const pt = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "";
+    const resP = await fetch(
+      `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=50&playlistId=${encodeURIComponent(uploadsPlaylist)}${pt}&key=${key}`,
+      { cache: "no-store" },
+    );
+    units++;
+    const bodyP: any = await resP.json().catch(() => null);
+    // Kênh CHƯA CÓ VIDEO nào: playlist "uploads" không tồn tại -> tương tác đúng là 0, KHÔNG phải lỗi
+    // (kênh học viên mới tạo rất hay gặp). Đừng ném lỗi để admin khỏi thấy báo đỏ vô cớ.
+    if (resP.status === 404 && page === 0) return { engagement: 0, videos: 0, units, capped: false };
+    if (!resP.ok) throw new Error(`playlistItems: ${String(bodyP?.error?.message ?? resP.status).slice(0, 200)}`);
+
+    const ids: string[] = (bodyP?.items ?? [])
+      .map((i: any) => i?.contentDetails?.videoId)
+      .filter((v: any) => typeof v === "string" && v);
+    if (ids.length) {
+      const resV = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${ids.join(",")}&key=${key}`,
+        { cache: "no-store" },
+      );
+      units++;
+      const bodyV: any = await resV.json().catch(() => null);
+      if (!resV.ok) throw new Error(`videos: ${String(bodyV?.error?.message ?? resV.status).slice(0, 200)}`);
+      for (const v of bodyV?.items ?? []) {
+        engagement += (num(v?.statistics?.likeCount) ?? 0) + (num(v?.statistics?.commentCount) ?? 0);
+        videos++;
+      }
+    }
+
+    pageToken = String(bodyP?.nextPageToken ?? "");
+    if (!pageToken) break;
+  }
+  return { engagement, videos, units, capped };
+}
+
+/** Cổng giờ cho lượt đếm tương tác YouTube: mặc định 6 giờ/lượt (app_settings.youtube_engagement_hours).
+ *  Lượt quét 30 phút chỉ đọc số cơ bản (1 đơn vị/kênh); đếm tương tác tốn ~3 đơn vị/kênh trở lên nên
+ *  giãn ra cho vừa hạn mức 10.000/ngày. Đặt mốc NGAY khi mở cổng để mọi kênh trong cùng lượt đều đếm,
+ *  lượt sau mới bị chặn. */
+async function ytEngagementDue(): Promise<boolean> {
+  const db = supabaseAdmin();
+  const [{ data: g }, { data: h }] = await Promise.all([
+    db.from("app_settings").select("value").eq("key", "last_yt_engagement_ms").maybeSingle(),
+    db.from("app_settings").select("value").eq("key", "youtube_engagement_hours").maybeSingle(),
+  ]);
+  const hours = Number(h?.value) > 0 ? Number(h?.value) : 6;
+  if (Date.now() - (Number(g?.value) || 0) < hours * 3_600_000) return false;
+  await db.from("app_settings").upsert({ key: "last_yt_engagement_ms", value: String(Date.now()) }, { onConflict: "key" });
+  return true;
+}
+
+type Scraper = (username: string, opts?: { withEngagement?: boolean }) => Promise<NormalizedProfile | null>;
+
+const SCRAPERS: Record<string, Scraper> = {
   tiktok: scrapeTikTokProfile,
   facebook: scrapeFacebookPage,
   youtube: scrapeYouTubeChannel,
@@ -625,19 +728,23 @@ export async function startDailyScrape(): Promise<ScrapeResult> {
       cost_usd: 0,
     });
 
+    // YouTube: quyết định MỘT LẦN cho cả lượt xem có đếm tương tác không (cổng giờ), để mọi kênh
+    // trong lượt cùng có/cùng không — tránh kênh đầu đếm xong đóng cổng làm các kênh sau trống.
+    const scraperOpts = cfg.platform === "youtube" ? { withEngagement: await ytEngagementDue() } : undefined;
+
     const stat = { platform: cfg.platform, channels: list.length, ok: 0, failed: [] as string[], verified: 0 };
     for (const ch of list) {
       let prof: NormalizedProfile | null = null;
       let errDetail: string | undefined;
       try {
-        prof = await scraper(ch.username);
+        prof = await scraper(ch.username, scraperOpts);
       } catch (e: any) {
         errDetail = String(e?.message ?? e);
       }
       if (!prof) {
         await sleep(jitter(4000)); // nghỉ dài hơn rồi thử lại 1 lần
         try {
-          prof = await scraper(ch.username);
+          prof = await scraper(ch.username, scraperOpts);
           errDetail = undefined;
         } catch (e: any) {
           errDetail = String(e?.message ?? e);

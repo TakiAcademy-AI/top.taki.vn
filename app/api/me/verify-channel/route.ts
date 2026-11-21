@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireStudent, jsonError } from "@/lib/api";
-import { scrapeTikTokProfile, scrapeFacebookPage } from "@/lib/scrape";
+import { scrapeTikTokProfile, scrapeFacebookPage, scrapeYouTubeChannel } from "@/lib/scrape";
 import { todayVN } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const SCRAPERS: Record<string, (u: string) => Promise<any>> = {
+// Xác minh tay 1 kênh -> YouTube đếm luôn tương tác (chỉ ~3 đơn vị hạn mức cho 1 kênh)
+const SCRAPERS: Record<string, (u: string, o?: { withEngagement?: boolean }) => Promise<any>> = {
   tiktok: scrapeTikTokProfile,
   facebook: scrapeFacebookPage,
+  youtube: scrapeYouTubeChannel,
 };
 
 /**
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   let prof: any = null;
   try {
-    prof = await scraper(ch.username);
+    prof = await scraper(ch.username, { withEngagement: true });
   } catch {
     prof = null;
   }
