@@ -21,7 +21,7 @@ export type NormalizedProfile = {
  * Engine quét TRỰC TIẾP — chi phí $0:
  *  - TikTok: đọc JSON __UNIVERSAL_DATA_FOR_REHYDRATION__ nhúng trong trang profile công khai.
  *  - Facebook: gọi binary `fb` (github.com/tamnd/facebook-cli) đọc dữ liệu trang ở chế độ ẩn danh.
- *  - YouTube: chờ YouTube Data API key (V1.1) — nền tảng đang bật mà chưa có engine sẽ báo skip.
+ *  - YouTube: YouTube Data API v3 (channels.list) — 1 đơn vị hạn mức/kênh, key lấy từ app_settings.
  * Quét TUẦN TỰ có giãn cách ngẫu nhiên để không bị chặn. Kênh lỗi ghi scrape_status=failed
  * (giữ điểm hôm qua, không chặn kênh khác).
  *
@@ -30,6 +30,8 @@ export type NormalizedProfile = {
  *            videosCount=videoCount · engagement=heartCount (tổng tương tác nhận được, cộng dồn)
  *  - Facebook: followers thật + bio=chuỗi giới thiệu trang
  *            totalViews/videosCount/engagement=null (chế độ ẩn danh chỉ đọc được bài mới nhất)
+ *  - YouTube: followers=subscriberCount · totalViews=viewCount (tổng view cả kênh)
+ *            videosCount=videoCount · engagement=null (YT không có chỉ số tương đương "talking about this")
  */
 
 const pexec = promisify(execFile);
@@ -494,9 +496,92 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
   return { ok: !error, verified };
 }
 
+/** Key API YouTube: ưu tiên env YOUTUBE_API_KEY, rồi app_settings.youtube_api_key — đổi key chỉ cần
+ *  sửa 1 dòng DB, KHÔNG phải build lại (giống cách làm với proxy, vì server 51 không set được env).
+ *  Cache 5 phút. */
+let _ytKeyCache: { val: string | undefined; at: number } | null = null;
+async function getYouTubeApiKey(): Promise<string | undefined> {
+  if (process.env.YOUTUBE_API_KEY) return process.env.YOUTUBE_API_KEY;
+  const now = Date.now();
+  if (_ytKeyCache && now - _ytKeyCache.at < 300_000) return _ytKeyCache.val;
+  let val: string | undefined;
+  try {
+    const { data } = await supabaseAdmin()
+      .from("app_settings")
+      .select("value")
+      .eq("key", "youtube_api_key")
+      .maybeSingle();
+    val = (data?.value ?? "").trim() || undefined;
+  } catch {
+    val = undefined;
+  }
+  _ytKeyCache = { val, at: now };
+  return val;
+}
+
+/** ID kênh YouTube (UC + 22 ký tự) — PHÂN BIỆT chữ hoa/thường, khác với handle @tenkenh. */
+const YT_CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/i;
+
+/**
+ * YouTube: Data API v3 `channels.list` — 1 ĐƠN VỊ hạn mức mỗi kênh, hạn mức miễn phí 10.000/ngày
+ * (50 kênh × 48 lượt quét/ngày = 2.400 → thừa sức). KHÔNG dùng proxy dân cư: YouTube không bóp số
+ * với IP máy chủ, đi thẳng cho đỡ tốn băng thông proxy.
+ *
+ * Cách curl trang công khai ĐÃ THỬ VÀ BỎ: số người đăng ký bị Google làm tròn ("5,2 N" = 5.200,
+ * sai tới ±50 sub = ±500 điểm), và phần lớn kênh không phơi tổng view/số video ra HTML.
+ *
+ * Kênh bật "ẩn số người đăng ký": API trả hiddenSubscriberCount=true → followers=null, vẫn ghi
+ * tổng view + số video bình thường (saveProfile giữ số tốt gần nhất cho follower).
+ */
+export async function scrapeYouTubeChannel(username: string): Promise<NormalizedProfile | null> {
+  const key = await getYouTubeApiKey();
+  if (!key) throw new Error("chưa có YouTube API key — điền app_settings.youtube_api_key");
+
+  // Thứ tự thử: ID kênh (UC...) → handle mới (@tenkenh) → username kiểu cũ (/user/...).
+  // KHÔNG dùng search.list để tìm kênh: 1 lần search tốn 100 đơn vị = 100 lần đọc kênh.
+  const attempts = YT_CHANNEL_ID.test(username)
+    ? [`id=${encodeURIComponent(username)}`]
+    : [`forHandle=${encodeURIComponent("@" + username)}`, `forUsername=${encodeURIComponent(username)}`];
+
+  let item: any = null;
+  let lastErr = "";
+  for (const q of attempts) {
+    const res = await fetch(
+      `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&${q}&key=${key}`,
+      { cache: "no-store" },
+    );
+    const body: any = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = String(body?.error?.message ?? `HTTP ${res.status}`);
+      // Key sai / chưa bật YouTube Data API / hết hạn mức: dừng ngay, thử tiếp chỉ tốn hạn mức vô ích.
+      if (res.status === 400 || res.status === 403) throw new Error(`YouTube API: ${msg}`.slice(0, 300));
+      lastErr = msg;
+      continue;
+    }
+    if (body?.items?.length) {
+      item = body.items[0];
+      break;
+    }
+  }
+  if (!item) throw new Error(lastErr ? `không tìm thấy kênh (${lastErr})` : "không tìm thấy kênh trên YouTube");
+
+  const st = item.statistics ?? {};
+  const hidden = st.hiddenSubscriberCount === true;
+  return {
+    ref: String(item.snippet?.customUrl ?? item.id ?? username).replace(/^@/, "").toLowerCase(),
+    followers: hidden ? null : num(st.subscriberCount),
+    totalViews: num(st.viewCount),
+    videosCount: num(st.videoCount),
+    engagement: null,
+    bio: String(item.snippet?.description ?? ""),
+    raw: { engine: "youtube-api", id: item.id, statistics: st, hiddenSubscriberCount: hidden },
+  };
+}
+
 const SCRAPERS: Record<string, (username: string) => Promise<NormalizedProfile | null>> = {
   tiktok: scrapeTikTokProfile,
   facebook: scrapeFacebookPage,
+  youtube: scrapeYouTubeChannel,
 };
 
 export type ScrapeResult = {

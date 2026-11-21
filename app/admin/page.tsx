@@ -834,7 +834,7 @@ export default function AdminPage() {
                       const ENGINE: Record<string, string> = {
                         tiktok: "Đọc trực tiếp trang profile",
                         facebook: "Đọc trực tiếp trang (fb-cli)",
-                        youtube: "Chờ YouTube API key",
+                        youtube: "YouTube Data API v3 (key trong app_settings)",
                         instagram: "Chưa hỗ trợ quét trực tiếp",
                       };
                       return (

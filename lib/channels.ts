@@ -71,7 +71,11 @@ export function normalizeChannel(platform: string, rawUrl: string): NormalizedCh
     // instagram
     username = (segs[0] || "").replace(/^@/, "");
   }
-  username = username.toLowerCase().replace(/[?#].*$/, "");
+  // YouTube: ID kênh (UC + 22 ký tự) PHÂN BIỆT chữ hoa/thường — hạ hết thành chữ thường là SAI ID,
+  // API tra không ra kênh. Handle (@tenkenh) thì YT coi @MrBeast == @mrbeast nên vẫn hạ chữ thường
+  // để việc check trùng kênh (so sánh username) còn bắt được.
+  username = username.replace(/[?#].*$/, "");
+  if (!(p === "youtube" && /^UC[A-Za-z0-9_-]{22}$/i.test(username))) username = username.toLowerCase();
   if (!username) throw new Error(`Không bóc được username từ link: ${rawUrl}`);
   return { platform: p, username, url: canonicalUrl(p, username) };
 }
@@ -79,7 +83,10 @@ export function normalizeChannel(platform: string, rawUrl: string): NormalizedCh
 export function canonicalUrl(platform: Platform, username: string): string {
   switch (platform) {
     case "tiktok": return `https://www.tiktok.com/@${username}`;
-    case "youtube": return `https://www.youtube.com/@${username}`;
+    // ID kênh phải vào dạng /channel/UC..., nhét vào /@UC... là link hỏng
+    case "youtube": return /^UC[A-Za-z0-9_-]{22}$/i.test(username)
+      ? `https://www.youtube.com/channel/${username}`
+      : `https://www.youtube.com/@${username}`;
     case "facebook": return `https://www.facebook.com/${username}`;
     case "instagram": return `https://www.instagram.com/${username}`;
   }
