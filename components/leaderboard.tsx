@@ -190,7 +190,7 @@ export function LeaderboardBoard({ campaignId, onOpenProfile }: { campaignId: st
   }, [campaignId]);
 
   if (rows === null) return <p className="mini-note">Đang tải bảng xếp hạng…</p>;
-  if (!rows.length) return <p className="mini-note">Chưa có ai trên bảng xếp hạng — điểm xuất hiện sau chu kỳ tính điểm đầu tiên (cập nhật mỗi 30 phút).</p>;
+  if (!rows.length) return <p className="mini-note">Chưa có ai trên bảng xếp hạng — điểm xuất hiện sau chu kỳ tính điểm đầu tiên (tự động lúc 5h30 và 18h30 hằng ngày).</p>;
 
   return (
     <>

@@ -205,6 +205,8 @@ export default function AdminPage() {
       if (!r.ok) { toast(d.error ?? "Lỗi"); return; }
       if (action === "scrape") {
         const parts = (d.platforms ?? []).map((s: any) => `${s.platform}: ${s.ok}/${s.channels} kênh${s.verified ? ` (+${s.verified} xác minh)` : ""}`);
+        if (d.graph?.total) parts.push(`Graph API: ${d.graph.ok}/${d.graph.total} kênh`);
+        if (d.scored != null) parts.push(`đã tính điểm (${d.scored} dòng)`);
         toast(parts.length ? `Đã quét xong — ${parts.join(" · ")}` : "Không có kênh nào cần quét hoặc nền tảng nào đang bật");
       } else {
         toast(`Đã tính điểm ${d.date}: ${d.campaigns} chiến dịch, ${d.entries} dòng điểm${d.flagged?.length ? `, gắn cờ ${d.flagged.length} kênh` : ""}`);
@@ -855,7 +857,7 @@ export default function AdminPage() {
                 </table>
               </div>
               <p className="mini-note" style={{ marginTop: 10 }}>
-                Lịch tự động: quét & tính điểm mỗi 30 phút. Quét trực tiếp từ máy chủ, không tốn phí dịch vụ ngoài.
+                Lịch tự động: quét & tính điểm lúc 5h30 và 18h30 hằng ngày (giờ VN). Cần số mới ngay thì bấm Quét ngay — một nút chạy trọn gói quét + Graph API + tính điểm.
               </p>
             </div>
 

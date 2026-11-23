@@ -1,9 +1,9 @@
-name: Quét dữ liệu mỗi 30 phút
+name: Quét dữ liệu (dự phòng - bấm tay)
+# Lịch tự động đã CHUYỂN sang Coolify scheduled tasks trên VPS (5h30 + 18h30 giờ VN,
+# chạy đúng giờ tuyệt đối — GitHub schedule từng trễ 5-8 tiếng). Workflow này chỉ giữ
+# lại để bấm chạy tay khi cần quét từ ngoài VPS.
 on:
-  schedule:
-    - cron: '*/30 * * * *'   # mỗi 30 phút (giờ UTC; GitHub có thể trễ 5-15p)
-                             # Các endpoint cron TỰ DỪNG khi không có cuộc thi đang chạy, TỰ CHẠY LẠI khi có.
-  workflow_dispatch: {}        # cho phép bấm chạy tay
+  workflow_dispatch: {}
 jobs:
   scrape:
     runs-on: ubuntu-latest

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireAdmin, jsonError } from "@/lib/api";
-import { startDailyScrape } from "@/lib/scrape";
+import { startDailyScrape, runGraphScrape } from "@/lib/scrape";
 import { runDailyScoring } from "@/lib/scoring";
 import { todayVN } from "@/lib/format";
 import { PLATFORMS } from "@/lib/channels";
@@ -71,10 +71,17 @@ export async function POST(req: NextRequest) {
         { key: "ext_scrape_request", value: String(Date.now()) },
         { onConflict: "key" }
       );
+      // Quét tay = trọn gói: kênh FB có token đi luôn qua Graph API (nguồn chính thống), xong tính điểm ngay
+      const date = todayVN();
+      let graph: Awaited<ReturnType<typeof runGraphScrape>> | null = null;
+      let scored: number | null = null;
+      try { graph = await runGraphScrape(date); } catch (e) { console.error("[admin/scrape] graph", e); }
+      try { scored = (await runDailyScoring(date)).entries; } catch (e) { console.error("[admin/scrape] scoring", e); }
       await db.from("audit_logs").insert({
-        actor_id: "admin", action: "manual_scrape", target_type: "system", detail: result as any,
+        actor_id: "admin", action: "manual_scrape", target_type: "system",
+        detail: { ...result, graph, scored } as any,
       });
-      return NextResponse.json(result);
+      return NextResponse.json({ ...result, graph, scored });
     }
     if (body.action === "score") {
       const date = body.date || todayVN();

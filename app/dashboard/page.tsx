@@ -136,7 +136,7 @@ export default function DashboardPage() {
       : await fetch("/api/channels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newChan) });
     const d = await r.json();
     if (r.ok) {
-      toast(editId ? "Đã sửa kênh. Hệ thống sẽ tự xác minh, hoặc bấm Xác minh ngay." : "Đã thêm kênh. Hệ thống sẽ tự xác minh trong 30 phút (hoặc bấm Xác minh ngay).");
+      toast(editId ? "Đã sửa kênh. Hệ thống sẽ tự xác minh, hoặc bấm Xác minh ngay." : "Đã thêm kênh. Hệ thống sẽ tự xác minh ở lượt quét kế tiếp (hoặc bấm Xác minh ngay).");
       setShowAdd(false);
       setEditId(null);
       setNewChan({ platform: platforms[0]?.value ?? "tiktok", url: "" });
@@ -278,7 +278,7 @@ export default function DashboardPage() {
                       </p>
                     )}
                     <p className="mini-note">
-                      Kênh sẽ được <b>tự động xác minh</b> khi hệ thống quét (mỗi 30 phút). Muốn xác minh
+                      Kênh sẽ được <b>tự động xác minh</b> khi hệ thống quét (5h30 và 18h30 hằng ngày). Muốn xác minh
                       liền thì bấm <b>“Xác minh ngay”</b>. Không cần chèn mã gì vào bio cả.
                     </p>
                   </div>
@@ -321,7 +321,7 @@ export default function DashboardPage() {
               <p className="mini-note">Chưa có điểm — bảng xếp hạng xuất hiện sau chu kỳ tính điểm đầu tiên.</p>
             )}
             <p className="mini-note" style={{ marginTop: 12 }}>
-              Điểm cập nhật tự động mỗi 30 phút từ dữ liệu kênh thật.
+              Điểm cập nhật tự động lúc 5h30 và 18h30 hằng ngày từ dữ liệu kênh thật.
               {part?.updated_on ? ` Cập nhật gần nhất: ngày ${part.updated_on.split("-").reverse().join("/")}.` : ""}
               {" "}Bấm vào từng học viên để xem hồ sơ kênh.
             </p>

@@ -30,8 +30,10 @@ cd ~/projects/dua-top-xay-kenh && npm run dev
 
 ## Luồng vận hành hàng ngày
 
-1. **05:30** — `/api/cron/daily-scrape`: quét tuần tự mọi kênh `pending` + `verified` trực tiếp từ máy chủ (giãn cách ngẫu nhiên chống chặn), chuẩn hóa về schema chung, ghi `channel_snapshots`; kênh `pending` có mã ID trong bio → tự chuyển `verified` + lưu baseline.
-3. **06:00** — `/api/cron/daily-scoring`: so snapshot hôm nay/hôm qua ra delta, nhân trọng số từng chiến dịch, ghi `score_entries`, cập nhật hạng + biến động hạng.
+Lịch tự động chạy bằng **Coolify scheduled tasks** trên VPS (đúng giờ tuyệt đối), **2 lượt/ngày: 05:30 và 18:30 giờ VN** (cron UTC `30 22 * * *` và `30 11 * * *`). Mỗi lượt gọi tuần tự 4 endpoint: `daily-scrape` → `daily-scoring` → `reels-curl` → `graph-scrape`. Ngoài 2 mốc này, admin bấm **Quét ngay** trong tab Quét dữ liệu — một nút chạy trọn gói quét + Graph API + tính điểm. (GitHub Actions chỉ còn bản bấm tay dự phòng — lịch schedule của GitHub từng trễ 5-8 tiếng.)
+
+1. `/api/cron/daily-scrape`: quét tuần tự mọi kênh `pending` + `verified` trực tiếp từ máy chủ (giãn cách ngẫu nhiên chống chặn), chuẩn hóa về schema chung, ghi `channel_snapshots`; kênh `pending` có mã ID trong bio → tự chuyển `verified` + lưu baseline.
+3. `/api/cron/daily-scoring`: so snapshot hôm nay/hôm qua ra delta, nhân trọng số từng chiến dịch, ghi `score_entries`, cập nhật hạng + biến động hạng.
    - **Idempotent**: chạy lại job cùng ngày sẽ xóa dòng tự động của ngày đó và tính lại — điểm không nhân đôi. Tính lại ngày cũ: `/api/cron/daily-scoring?date=2026-09-01&secret=...`
    - Kênh quét lỗi: giữ điểm hôm qua, không chặn kênh khác, liệt kê trong report trả về (`scrapeFailed`).
 4. Chống gian lận: follower tăng > 5× trung bình 7 ngày và tương tác/follower dưới ngưỡng → kênh chuyển `flagged`, treo điểm ngày đó chờ admin duyệt lại (xác minh tay trong hồ sơ học viên).
