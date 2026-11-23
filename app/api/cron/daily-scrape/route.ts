@@ -3,6 +3,7 @@ import { startDailyScrape } from "@/lib/scrape";
 import { checkCronSecret, jsonError } from "@/lib/api";
 import { hasActiveCampaign } from "@/lib/scoring";
 import { todayVN } from "@/lib/format";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -16,6 +17,10 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ skipped: "không có cuộc thi đang chạy" });
   try {
     const result = await startDailyScrape();
+    // Vẫy cờ cho extension (poll mỗi phút) cùng quét reels ở mốc lịch này — extension đã bỏ tự chạy 4h.
+    await supabaseAdmin()
+      .from("app_settings")
+      .upsert({ key: "ext_scrape_request", value: String(Date.now()) }, { onConflict: "key" });
     return NextResponse.json(result);
   } catch (e: any) {
     console.error("[daily-scrape]", e);
