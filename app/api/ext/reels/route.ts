@@ -14,6 +14,10 @@ export const maxDuration = 120;
 export async function POST(req: NextRequest) {
   if (!checkCronSecret(req)) return jsonError("Sai secret", 401);
   const body = await req.json().catch(() => null);
+  // CỔNG VERSION: extension < pv2 parse "6,6K" thành 66.000 (phồng 10 lần) — từ chối dữ liệu bản cũ,
+  // nếu không nó sẽ tái nhiễm database qua merge GREATEST sau mỗi lần sửa.
+  if (Number(body?.pv ?? 0) < 2)
+    return NextResponse.json({ ignored: "extension bản cũ (parser lỗi x10) — hãy RELOAD extension trong chrome://extensions" });
   const results: any[] = Array.isArray(body?.results) ? body.results : [];
   if (!results.length) return NextResponse.json({ ok: 0 });
   // Hết cuộc thi -> không ghi số extension gửi (phòng hờ extension còn chạy với list cũ).
