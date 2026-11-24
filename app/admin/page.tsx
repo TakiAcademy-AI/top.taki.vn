@@ -114,6 +114,7 @@ export default function AdminPage() {
   const [profile, setProfile] = useState<any | null>(null);
   const [scrape, setScrape] = useState<any | null>(null);
   const [scrapeBusy, setScrapeBusy] = useState(false);
+  const [verifyAllBusy, setVerifyAllBusy] = useState(false);
   const [tokenFor, setTokenFor] = useState<string | null>(null);
   const [tokenForm, setTokenForm] = useState({ page_id: "", token: "" });
   const [savingToken, setSavingToken] = useState(false);
@@ -191,6 +192,24 @@ export default function AdminPage() {
     if (r.ok) setScrape(await r.json());
   }, []);
   useEffect(() => { if (authed && tab === "scrape") loadScrape(); }, [authed, tab, loadScrape]);
+
+  async function verifyAllPending() {
+    const n = scrape?.pending?.length ?? 0;
+    if (!n || verifyAllBusy) return;
+    if (!confirm(`Xác minh cả ${n} kênh đang chờ? Mốc khởi điểm = 0 (tính toàn bộ follower hiện có thành điểm, như xác minh tay).`)) return;
+    setVerifyAllBusy(true);
+    try {
+      const r = await fetch("/api/admin/channels/verify-all", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error ?? "Lỗi xác minh hàng loạt"); return; }
+      const failedScrape = (d.results ?? []).filter((x: any) => !x.scraped).length;
+      toast(`Đã xác minh ${d.verified}/${n} kênh${failedScrape ? ` (${failedScrape} kênh chưa quét được số — sẽ có số ở lượt quét sau)` : ""}`);
+      loadScrape();
+      loadStudents(q, stClassId);
+    } finally {
+      setVerifyAllBusy(false);
+    }
+  }
 
   async function scrapeAction(action: "scrape" | "score") {
     if (scrapeBusy) return;
@@ -860,6 +879,26 @@ export default function AdminPage() {
                 Lịch tự động: quét & tính điểm lúc 5h30 và 18h30 hằng ngày (giờ VN). Cần số mới ngay thì bấm Quét ngay — một nút chạy trọn gói quét + Graph API + tính điểm.
               </p>
             </div>
+
+            {(scrape?.pending?.length ?? 0) > 0 && (
+              <div className="card" style={{ marginBottom: 18 }}>
+                <h3>
+                  ⏳ Kênh chờ xác minh ({scrape.pending.length})
+                  <button className="btn btn-sm" style={{ marginLeft: "auto" }} disabled={verifyAllBusy} onClick={verifyAllPending}>
+                    {verifyAllBusy ? "Đang xác minh…" : `✓ Xác minh tất cả (${scrape.pending.length})`}
+                  </button>
+                </h3>
+                {scrape.pending.slice(0, 20).map((c: any) => (
+                  <p key={c.id} style={{ fontSize: 12.5, marginBottom: 5 }}>
+                    <b>{c.platform}</b> @{c.username} · {c.student ?? "—"}
+                  </p>
+                ))}
+                <p className="mini-note">
+                  Một nút duyệt hết: kênh nào quét được thì lưu luôn số hôm nay; kênh quét lỗi (FB đang chặn) vẫn được
+                  xác minh với mốc khởi điểm 0 — giống hệt xác minh tay từng kênh trong hồ sơ.
+                </p>
+              </div>
+            )}
 
             <div className="two-col" style={{ marginBottom: 18 }}>
               <div className="card">

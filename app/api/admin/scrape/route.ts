@@ -43,6 +43,7 @@ export async function GET() {
   });
   const notScanned = (channels ?? []).filter((c) => !scanned.has(c.id)).map(fmtCh);
   const flagged = (channels ?? []).filter((c) => c.status === "flagged").map(fmtCh);
+  const pending = (channels ?? []).filter((c) => c.status === "pending").map(fmtCh);
 
   return NextResponse.json({
     engine: "direct",
@@ -53,6 +54,7 @@ export async function GET() {
     channels_scanned_today: scanned.size,
     not_scanned: notScanned.slice(0, 50),
     flagged,
+    pending,
   });
 }
 
