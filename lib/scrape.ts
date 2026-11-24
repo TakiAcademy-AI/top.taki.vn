@@ -173,13 +173,18 @@ function decodeEntities(s: string): string {
 // Parse số rút gọn kiểu "2.5K" / "1.2M" / "11,712" -> số nguyên
 function parseCompact(s: string | undefined | null): number | null {
   if (!s) return null;
-  const m = String(s).trim().match(/^([\d.,]+)\s*([KkMm])?$/);
+  // Hỗ trợ cả hậu tố tiếng Việt: N = nghìn, Tr = triệu (Chrome/FB tiếng Việt).
+  const m = String(s).trim().match(/^([\d.,]+)\s*(K|M|B|N|Tr|Tỷ)?$/i);
   if (!m) return null;
-  let n = parseFloat(m[1].replace(/,/g, ""));
-  if (!Number.isFinite(n)) return null;
+  const raw = m[1];
+  // CÓ hậu tố -> "6,6K"/"6.6K" đều là 6.600: dấu phẩy là THẬP PHÂN (bug cũ xoá phẩy -> 66K, phồng 10 lần).
+  // KHÔNG hậu tố -> số đếm đầy đủ "1,234"/"1.234" = 1234: dấu phẩy/chấm là phân tách nghìn.
   const suf = (m[2] || "").toLowerCase();
-  if (suf === "k") n *= 1000;
-  else if (suf === "m") n *= 1_000_000;
+  const n = suf ? parseFloat(raw.replace(",", ".")) : parseFloat(raw.replace(/[.,]/g, ""));
+  if (!Number.isFinite(n)) return null;
+  if (suf === "k" || suf === "n") return Math.round(n * 1000);
+  if (suf === "m" || suf === "tr") return Math.round(n * 1_000_000);
+  if (suf === "b" || suf === "tỷ") return Math.round(n * 1_000_000_000);
   return Math.round(n);
 }
 
@@ -307,17 +312,8 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
   const name = mTitle ? decodeEntities(mTitle[1]) : "";
 
   // "1.5K" / "11,712" -> số (K/M = nghìn/triệu, dấu phẩy = ngăn nghìn)
-  const parseCount = (s: string | undefined): number | null => {
-    if (!s) return null;
-    const m = s.trim().match(/^([\d.,]+)\s*([KkMm])?$/);
-    if (!m) return null;
-    let n = parseFloat(m[1].replace(/,/g, ""));
-    if (!Number.isFinite(n)) return null;
-    const suf = (m[2] || "").toLowerCase();
-    if (suf === "k") n *= 1000;
-    else if (suf === "m") n *= 1_000_000;
-    return Math.round(n);
-  };
+  // Dùng chung parseCompact (đã xử lý đúng "6,6K" = 6.600 và hậu tố N/Tr tiếng Việt).
+  const parseCount = (s: string | undefined): number | null => parseCompact(s);
 
   // Page: "{likes} likes · {talking} talking about this. {bio}"
   const likes = desc.match(/([\d.,]+\s*[KkMm]?)\s*(?:likes?|lượt thích)/i);
