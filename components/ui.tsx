@@ -215,6 +215,9 @@ export function ProfileModal({ publicId, onClose }: { publicId: string; onClose:
                 <p style={{ fontSize: 13, fontWeight: 700, color: "var(--navy)" }}>
                   🏁 {p.campaign_name}: Hạng {p.rank ?? "—"} · {fmtN(p.total_score)} điểm
                 </p>
+                <p className="mini-note" style={{ marginBottom: 6 }}>
+                  Điểm thành phần theo từng chỉ số (đã nhân trọng số) — không phải số thô trên kênh.
+                </p>
                 <div className="table-scroll">
                   <table>
                     <tbody>
@@ -222,8 +225,8 @@ export function ProfileModal({ publicId, onClose }: { publicId: string; onClose:
                         .filter(([, v]) => v !== 0)
                         .map(([m, v]) => (
                           <tr key={m}>
-                            <td>{METRIC_LABEL[m] ?? m}</td>
-                            <td style={{ textAlign: "right" }}><b>{fmtN(v)}</b></td>
+                            <td>Điểm {(METRIC_LABEL[m] ?? m).toLowerCase()}</td>
+                            <td style={{ textAlign: "right" }}><b>{fmtN(v)} đ</b></td>
                           </tr>
                         ))}
                     </tbody>
