@@ -910,6 +910,12 @@ export default function AdminPage() {
                   </p>
                 ))}
                 {scrape && !scrape.not_scanned?.length && <p className="mini-note">Tất cả kênh đã có số liệu hôm nay ✓</p>}
+                {(scrape?.not_scanned?.length ?? 0) > 0 && (
+                  <p className="mini-note">
+                    Các kênh này đã xác minh, chỉ thiếu số liệu hôm nay — bấm <b>Quét ngay</b> để quét lại.
+                    (Nút "Xác minh tất cả" chỉ hiện khi có kênh <i>chờ xác minh</i> — hiện không có kênh nào chờ.)
+                  </p>
+                )}
               </div>
               <div className="card">
                 <h3>🚩 Kênh bị gắn cờ gian lận ({scrape?.flagged?.length ?? 0})</h3>
