@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { requireStudent, jsonError } from "@/lib/api";
 import { normalizeChannel } from "@/lib/channels";
 import { resolveFacebookShareUrl } from "@/lib/scrape";
-import { todayVN } from "@/lib/format";
+import { registrationWindow } from "@/lib/channelOps";
 
 export const dynamic = "force-dynamic";
 
@@ -29,16 +29,7 @@ export async function POST(req: NextRequest) {
     return jsonError(e.message);
   }
 
-  const today = todayVN();
-  const { data: parts } = await db
-    .from("campaign_participants")
-    .select("campaigns(status, registration_deadline)")
-    .eq("student_id", sid);
-  const stillOpen = (parts ?? []).some((p: any) => {
-    const c = p.campaigns;
-    return c && ["open", "running"].includes(c.status) && (!c.registration_deadline || c.registration_deadline >= today);
-  });
-  if (!stillOpen) return jsonError("Đã quá hạn chốt đăng ký kênh của các chiến dịch bạn tham gia");
+  if (!(await registrationWindow(db, sid)).open) return jsonError("Đã quá hạn chốt đăng ký kênh của các chiến dịch bạn tham gia");
 
   const { data, error } = await db
     .from("channels")

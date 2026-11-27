@@ -130,25 +130,46 @@ export default function DashboardPage() {
     setHistory(d.entries ?? []);
   }
 
+  async function reloadRows(campaignId?: string) {
+    if (!campaignId) return;
+    const d = await fetch(`/api/leaderboard?campaign_id=${campaignId}`).then((r) => r.json()).catch(() => null);
+    if (d) setRows(d.rows ?? []);
+  }
+
+  // Kênh đã xác minh đang được tính điểm: đổi/gỡ sẽ xóa điểm của kênh đó -> phải hỏi lại cho rõ
+  const editingVerified = !!editId && me?.channels.find((c) => c.id === editId)?.status === "verified";
+
   async function saveChannel() {
+    if (editingVerified && !confirm(
+      "Đổi sang kênh khác?\n\nKênh mới phải xác minh lại từ đầu, còn ĐIỂM CỦA KÊNH CŨ trong các chiến dịch đang chạy sẽ bị xóa và không khôi phục được."
+    )) return;
     const r = editId
       ? await fetch(`/api/channels/${editId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newChan) })
       : await fetch("/api/channels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newChan) });
     const d = await r.json();
     if (r.ok) {
-      toast(editId ? "Đã sửa kênh. Hệ thống sẽ tự xác minh, hoặc bấm Xác minh ngay." : "Đã thêm kênh. Hệ thống sẽ tự xác minh ở lượt quét kế tiếp (hoặc bấm Xác minh ngay).");
+      toast(
+        !editId ? "Đã thêm kênh. Hệ thống sẽ tự xác minh ở lượt quét kế tiếp (hoặc bấm Xác minh ngay)."
+        : d.replaced ? "Đã đổi kênh. Kênh mới đang chờ xác minh — bấm Xác minh ngay để tính điểm."
+        : d.identity_changed ? "Đã sửa kênh. Hệ thống sẽ tự xác minh, hoặc bấm Xác minh ngay."
+        : "Đã lưu."
+      );
       setShowAdd(false);
       setEditId(null);
       setNewChan({ platform: platforms[0]?.value ?? "tiktok", url: "" });
       load();
+      if (d.replaced) reloadRows(part?.campaign_id);
     } else toast(d.error ?? "Không lưu được kênh");
   }
 
-  async function deleteMyChannel(id: string, username: string) {
-    if (!confirm(`Xóa kênh @${username}? (chỉ xóa được kênh chưa xác minh)`)) return;
+  async function deleteMyChannel(id: string, username: string, status: string) {
+    const msg = status === "verified"
+      ? `Gỡ kênh @${username}?\n\nKênh đang được tính điểm: toàn bộ ĐIỂM CỦA KÊNH NÀY trong các chiến dịch đang chạy sẽ bị xóa và không khôi phục được.\n(Muốn chuyển sang link khác thì bấm "Đổi kênh" thay vì gỡ.)`
+      : `Xóa kênh @${username}?`;
+    if (!confirm(msg)) return;
     const r = await fetch(`/api/channels/${id}`, { method: "DELETE" });
-    if (r.ok) { toast("Đã xóa kênh"); load(); }
-    else toast((await r.json()).error ?? "Không xóa được");
+    if (r.ok) { toast("Đã xóa kênh"); load(); if (status === "verified") reloadRows(part?.campaign_id); }
+    else toast((await r.json().catch(() => ({}))).error ?? "Không xóa được");
   }
 
   async function logout() {
@@ -215,20 +236,27 @@ export default function DashboardPage() {
                     </div>
                     {c.status === "verified" && <span className="st st-ok">Đã xác minh</span>}
                     {c.status === "flagged" && <span className="st st-flag">Bị gắn cờ</span>}
-                    {c.status === "pending" && (
-                      <>
-                        <span className="st st-wait">Chờ xác minh</span>
-                        <div className="chan-acts">
+                    {c.status === "pending" && <span className="st st-wait">Chờ xác minh</span>}
+                    {c.status === "flagged" ? (
+                      <p className="mini-note" style={{ flexBasis: "100%", margin: 0 }}>
+                        Kênh đang được trợ giảng kiểm tra — liên hệ trợ giảng nếu cần sửa hoặc gỡ.
+                      </p>
+                    ) : (
+                      <div className="chan-acts">
+                        {c.status === "pending" && (
                           <button className="btn-ghost btn-sm" disabled={verifyingId === c.id} onClick={() => selfVerify(c.id)}>
                             {verifyingId === c.id ? "Đang quét…" : "Xác minh ngay"}
                           </button>
-                          <button className="btn-ghost btn-sm" title="Sửa link kênh"
-                            onClick={() => { setEditId(c.id); setNewChan({ platform: c.platform, url: c.url ?? "" }); setShowAdd(true); }}>
-                            Sửa
-                          </button>
-                          <button className="btn-ghost btn-sm btn-danger" title="Xóa kênh" style={{ marginLeft: "auto" }} onClick={() => deleteMyChannel(c.id, c.username)}>✕</button>
-                        </div>
-                      </>
+                        )}
+                        <button className="btn-ghost btn-sm" title={c.status === "verified" ? "Đổi sang link kênh khác" : "Sửa link kênh"}
+                          onClick={() => { setEditId(c.id); setNewChan({ platform: c.platform, url: c.url ?? "" }); setShowAdd(true); }}>
+                          {c.status === "verified" ? "Đổi kênh" : "Sửa"}
+                        </button>
+                        <button className="btn-ghost btn-sm btn-danger" title={c.status === "verified" ? "Gỡ kênh" : "Xóa kênh"}
+                          style={{ marginLeft: "auto" }} onClick={() => deleteMyChannel(c.id, c.username, c.status)}>
+                          {c.status === "verified" ? "Gỡ kênh" : "✕"}
+                        </button>
+                      </div>
                     )}
                   </div>
                   {c.platform === "facebook" && (
@@ -346,7 +374,15 @@ export default function DashboardPage() {
       {showAdd && (
         <div className="modal-bg" onClick={() => { setShowAdd(false); setEditId(null); }}>
           <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 14 }}>{editId ? "Sửa kênh" : "Thêm kênh mới"}</h3>
+            <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 14 }}>
+              {editingVerified ? "Đổi kênh" : editId ? "Sửa kênh" : "Thêm kênh mới"}
+            </h3>
+            {editingVerified && (
+              <p className="mini-note" style={{ color: "var(--red)", fontWeight: 700, marginBottom: 12 }}>
+                ⚠️ Kênh này đã xác minh và đang tính điểm. Đổi sang kênh khác = đăng ký kênh mới: phải xác minh lại,
+                điểm của kênh cũ trong các chiến dịch đang chạy sẽ bị xóa.
+              </p>
+            )}
             <div className="field">
               <label>Nền tảng</label>
               <select value={newChan.platform} onChange={(e) => setNewChan({ ...newChan, platform: e.target.value })}>
@@ -357,7 +393,7 @@ export default function DashboardPage() {
               <label>Link kênh</label>
               <input value={newChan.url} onChange={(e) => setNewChan({ ...newChan, url: e.target.value })} placeholder="Dán link kênh" />
             </div>
-            <button className="btn" onClick={saveChannel}>{editId ? "Lưu thay đổi" : "Thêm kênh"}</button>
+            <button className="btn" onClick={saveChannel}>{editingVerified ? "Đổi kênh" : editId ? "Lưu thay đổi" : "Thêm kênh"}</button>
           </div>
         </div>
       )}

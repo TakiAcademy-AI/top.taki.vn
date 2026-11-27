@@ -125,6 +125,35 @@ export default function AdminPage() {
   );
   const [platforms, setPlatforms] = useState<{ value: string; label: string }[]>([]);
   const [addChan, setAddChan] = useState<{ platform: string; url: string } | null>(null);
+  const [editChan, setEditChan] = useState<{ id: string; username: string; status: string; platform: string; url: string } | null>(null);
+
+  async function adminEditChannel() {
+    if (!editChan || !profile) return;
+    const scored = editChan.status === "verified" || editChan.status === "flagged";
+    if (scored && !confirm(
+      `Sửa link kênh @${editChan.username}?\n\nNếu link mới là kênh KHÁC, kênh này được thay bằng kênh mới (chờ xác minh) và ĐIỂM CỦA KÊNH CŨ trong các chiến dịch đang chạy bị xóa. Chỉ chỉnh lại cách ghi link của cùng một kênh thì không ảnh hưởng gì.`
+    )) return;
+    const r = await fetch(`/api/admin/channels/${editChan.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: editChan.platform, url: editChan.url }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      toast(d.replaced ? "Đã đổi sang kênh mới — chờ xác minh" : d.identity_changed ? "Đã sửa link kênh" : "Đã lưu");
+      setEditChan(null); openProfile(profile.student.id); loadStudents(q, stClassId);
+    } else toast(d.error ?? "Không sửa được kênh");
+  }
+
+  async function hardDeleteChannel(chId: string, username: string) {
+    if (!confirm(
+      `XÓA HẲN kênh @${username}?\n\nKênh biến khỏi hệ thống (username được giải phóng cho người khác đăng ký) và toàn bộ điểm của kênh ở MỌI chiến dịch bị xóa. KHÔNG hoàn tác được.`
+    )) return;
+    const reason = prompt("Nhập lý do xóa (bắt buộc, lưu vào nhật ký hệ thống):");
+    if (!reason?.trim()) return;
+    const r = await fetch(`/api/admin/channels/${chId}?hard=1&reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
+    if (r.ok) { toast("Đã xóa hẳn kênh"); openProfile(profile.student.id); loadStudents(q, stClassId); }
+    else toast((await r.json().catch(() => ({}))).error ?? "Không xóa được");
+  }
 
   async function adminAddChannel() {
     if (!addChan || !profile) return;
@@ -415,7 +444,7 @@ export default function AdminPage() {
   }
 
   async function removeChannel(chId: string, username: string) {
-    const reason = prompt(`Gỡ kênh @${username}? Kênh sẽ ẩn khỏi hệ thống và ngừng tính điểm (lịch sử vẫn giữ).\nNhập lý do (bắt buộc):`);
+    const reason = prompt(`Gỡ kênh @${username}? Kênh sẽ ẩn khỏi hệ thống, ngừng tính điểm và ĐIỂM CỦA KÊNH BỊ XÓA (khôi phục kênh không lấy lại được điểm).\nNhập lý do (bắt buộc):`);
     if (!reason) return;
     const r = await fetch(`/api/admin/channels/${chId}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
     if (r.ok) { toast("Đã gỡ kênh"); openProfile(profile.student.id); loadStudents(q, stClassId); }
@@ -979,8 +1008,31 @@ export default function AdminPage() {
         </div>
       )}
 
+      {editChan && (
+        <div className="modal-bg" style={{ zIndex: 95 }} onClick={() => setEditChan(null)}>
+          <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 4 }}>✏️ Sửa link kênh · @{editChan.username}</h3>
+            <p className="mini-note" style={{ marginBottom: 14 }}>{profile?.student?.full_name} · {profile?.student?.public_id}</p>
+            <div className="field">
+              <label>Nền tảng</label>
+              <select value={editChan.platform} onChange={(e) => setEditChan({ ...editChan, platform: e.target.value })}>
+                {platforms.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Link kênh (chấp nhận cả link chia sẻ Facebook)</label>
+              <input value={editChan.url} onChange={(e) => setEditChan({ ...editChan, url: e.target.value })} placeholder="Dán link kênh" />
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn" style={{ width: "auto" }} onClick={adminEditChannel}>Lưu</button>
+              <button className="btn-ghost" onClick={() => setEditChan(null)}>Hủy</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editCamp && (() => {
-        const frozen = !["draft", "open"].includes(editCamp.status);
+        const frozen =!["draft", "open"].includes(editCamp.status);
         return (
           <div className="modal-bg" onClick={() => setEditCamp(null)}>
             <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
@@ -1111,9 +1163,15 @@ export default function AdminPage() {
                     {c.status !== "verified" && (
                       <button className="btn-ghost btn-sm" onClick={() => verifyChannel(c.id)}>Xác minh tay</button>
                     )}
+                    <button className="btn-ghost btn-sm" onClick={() => setEditChan({ id: c.id, username: c.username, status: c.status, platform: c.platform, url: c.url ?? "" })}>
+                      Sửa link
+                    </button>
                     <button className="btn-ghost btn-sm btn-danger" onClick={() => removeChannel(c.id, c.username)}>Gỡ kênh</button>
                   </>
                 )}
+                <button className="btn-ghost btn-sm btn-danger" title="Xóa khỏi hệ thống, giải phóng username" onClick={() => hardDeleteChannel(c.id, c.username)}>
+                  Xóa hẳn
+                </button>
                 {c.platform === "facebook" && c.status !== "removed" && (
                   <div className="fb-connect" style={{ flexBasis: "100%", margin: "4px 0 0" }}>
                     {c.has_token ? (
