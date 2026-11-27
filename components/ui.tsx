@@ -21,12 +21,12 @@ export function useToast() {
 export function SiteHeader({ subtitle, right }: { subtitle: string; right?: React.ReactNode }) {
   return (
     <header className="site-header">
-      <div className="logo">
+      <a className="logo" href="/" aria-label="Về trang chủ">
         <div className="flag">🏁</div>
         <div>
           ĐUA TOP XÂY KÊNH<small>{subtitle}</small>
         </div>
-      </div>
+      </a>
       <div className="hd-user">{right}</div>
     </header>
   );
