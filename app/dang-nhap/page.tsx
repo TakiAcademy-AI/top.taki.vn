@@ -123,6 +123,9 @@ export default function LoginPage() {
               Chưa có tài khoản? <a href="/dang-ky" style={{ fontWeight: 700 }}>Đăng ký vào đường đua</a>
             </p>
           </div>
+          <p className="mini-note" style={{ textAlign: "center", marginTop: 14 }}>
+            <a href="/chinh-sach-bao-mat">Chính sách bảo mật</a> · <a href="/dieu-khoan">Điều khoản sử dụng</a>
+          </p>
         </div>
       </div>
       {toastNode}

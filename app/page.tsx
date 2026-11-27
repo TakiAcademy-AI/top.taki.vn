@@ -269,6 +269,10 @@ export default function HomePage() {
             Tìm hiểu khóa học tại taki.vn
           </a>
         </div>
+
+        <p className="mini-note" style={{ textAlign: "center", marginTop: 22 }}>
+          <a href="/chinh-sach-bao-mat">Chính sách bảo mật</a> · <a href="/dieu-khoan">Điều khoản sử dụng</a>
+        </p>
       </div>
 
       {profileId && <ProfileModal publicId={profileId} onClose={() => setProfileId(null)} />}

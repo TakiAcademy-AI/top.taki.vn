@@ -309,6 +309,9 @@ export default function RegisterPage() {
             )}
           </div>
         </div>
+        <p className="mini-note" style={{ textAlign: "center", marginTop: 22 }}>
+          Bằng việc đăng ký, bạn đồng ý với <a href="/dieu-khoan">Điều khoản sử dụng</a> và <a href="/chinh-sach-bao-mat">Chính sách bảo mật</a>.
+        </p>
       </div>
       {profileId && <ProfileModal publicId={profileId} onClose={() => setProfileId(null)} />}
       {toastNode}

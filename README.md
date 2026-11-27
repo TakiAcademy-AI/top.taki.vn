@@ -61,7 +61,7 @@ curl "http://localhost:3300/api/cron/daily-scoring?secret=CRON_SECRET_CUA_SEP"
 
 - Đăng ký kênh có ô **Email** (bắt buộc); bấm nút Google ngay dưới ô đó thì email được Google xác minh luôn. Học viên cũ (chưa có email) vào Dashboard bấm **Liên kết Google** là dùng được.
 - Đăng nhập Google nhận ra học viên bằng email trong hồ sơ. Vẫn đăng nhập được bằng SĐT như cũ.
-- Bật tính năng: chạy `supabase/migrations/0002_student_email.sql` (**trước khi deploy**), rồi đặt biến `GOOGLE_CLIENT_ID` (hướng dẫn tạo ở `.env.example`). Chưa đặt biến thì nút Google tự ẩn.
+- Bật tính năng: chạy `supabase/migrations/0002_student_email.sql` (**trước khi deploy**), rồi đặt Client ID: bảng `app_settings`, key `google_client_id` (hoặc env `GOOGLE_CLIENT_ID`; hướng dẫn tạo ở `.env.example`). Chưa đặt thì nút Google tự ẩn.
 - Server tự kiểm chữ ký ID token của Google (`lib/google.ts`), không cần client secret.
 
 ## Quét dữ liệu & bảng xếp hạng chi tiết

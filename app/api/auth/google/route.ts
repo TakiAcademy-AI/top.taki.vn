@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** Cấu hình công khai cho nút Google ở client (đọc lúc chạy, khỏi phải build lại khi đổi). null = chưa bật. */
 export async function GET() {
-  return NextResponse.json({ client_id: googleClientId() });
+  return NextResponse.json({ client_id: await googleClientId() });
 }
 
 /**
