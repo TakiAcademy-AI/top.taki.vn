@@ -5,6 +5,8 @@ import { setSession } from "@/lib/session";
 import { normalizePhone, todayVN } from "@/lib/format";
 import { normalizeChannel } from "@/lib/channels";
 import { resolveFacebookShareUrl } from "@/lib/scrape";
+import { normalizeEmail } from "@/lib/email";
+import { GoogleAuthError, verifyGoogleIdToken } from "@/lib/google";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,22 @@ export async function POST(req: NextRequest) {
   if (!phone) return jsonError("Số điện thoại không đúng định dạng Việt Nam");
   const classId = String(body.class_id ?? "");
   if (!classId) return jsonError("Vui lòng chọn lớp học");
+
+  // Email: đi kèm google_credential thì lấy email Google đã xác minh; không thì dùng email học viên gõ (chưa xác minh)
+  let email: string | null;
+  let emailVerified = false;
+  if (body.google_credential) {
+    try {
+      email = (await verifyGoogleIdToken(String(body.google_credential))).email;
+      emailVerified = true;
+    } catch (e) {
+      if (e instanceof GoogleAuthError) return jsonError(e.message, e.status, { google_expired: e.expired });
+      throw e;
+    }
+  } else {
+    email = normalizeEmail(String(body.email ?? ""));
+    if (!email) return jsonError("Vui lòng nhập email hợp lệ (dạng ten@gmail.com)");
+  }
 
   const rawChannels: { platform: string; url: string }[] = Array.isArray(body.channels) ? body.channels : [];
   const cleaned = rawChannels.filter((c) => c?.url?.trim());
@@ -44,6 +62,12 @@ export async function POST(req: NextRequest) {
     return jsonError("Số điện thoại đã đăng ký. Vui lòng đăng nhập bằng OTP.", 409, { phone_exists: true });
   }
 
+  const { data: emailOwner, error: emailErr } = await db.from("students").select("id").eq("email", email).maybeSingle();
+  if (emailErr) return jsonError("Hệ thống đang nâng cấp, vui lòng thử đăng ký lại sau ít phút", 503);
+  if (emailOwner) {
+    return jsonError("Email này đã có tài khoản. Hãy đăng nhập bằng Google hoặc số điện thoại.", 409, { email_exists: true });
+  }
+
   // Báo RÕ kênh nào đã có người đăng ký (thay vì "một kênh" chung chung)
   const PF_LABEL: Record<string, string> = { tiktok: "TikTok", youtube: "YouTube", facebook: "Facebook", instagram: "Instagram" };
   const unames = normalized.map((c) => c.username);
@@ -63,10 +87,15 @@ export async function POST(req: NextRequest) {
 
   const { data: student, error: sErr } = await db
     .from("students")
-    .insert({ public_id: publicId, full_name: fullName, phone, class_id: classId })
+    .insert({ public_id: publicId, full_name: fullName, phone, class_id: classId, email, email_verified: emailVerified })
     .select()
     .single();
-  if (sErr) return jsonError("Không tạo được hồ sơ học viên", 500);
+  if (sErr) {
+    if ((sErr as any).code === "23505" && /email/i.test(`${sErr.message} ${sErr.details ?? ""}`)) {
+      return jsonError("Email này đã có tài khoản. Hãy đăng nhập bằng Google hoặc số điện thoại.", 409, { email_exists: true });
+    }
+    return jsonError("Không tạo được hồ sơ học viên", 500);
+  }
 
   const chRows = normalized.map((c) => ({
     student_id: student.id,

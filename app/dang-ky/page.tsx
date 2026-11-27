@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Countdown, Lane, LBRow, Podium, ProfileModal, SiteHeader, useToast } from "@/components/ui";
+import { GoogleButton, peekGoogleCredential } from "@/components/google-button";
 
 type OpenCampaign = {
   id: string;
@@ -24,6 +25,8 @@ export default function RegisterPage() {
   const [rows, setRows] = useState<LBRow[]>([]);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [gcred, setGcred] = useState<string | null>(null); // ID token Google: email đã xác minh, khóa ô email
   const [classId, setClassId] = useState("");
   const [chans, setChans] = useState<ChanInput[]>([{ platform: "tiktok", url: "" }]);
   // Kết quả giải mã link theo từng dòng kênh: giúp học viên phát hiện dán nhầm link người khác
@@ -62,6 +65,23 @@ export default function RegisterPage() {
     }).catch(() => {});
   }, [router]);
 
+  // Điền email (+ tên nếu còn trống) từ tài khoản Google; server vẫn xác thực lại token khi gửi đăng ký
+  function applyGoogle(credential: string) {
+    const info = peekGoogleCredential(credential);
+    if (!info) { toast("Không đọc được thông tin Google, thử lại nhé"); return; }
+    setGcred(credential);
+    setEmail(info.email);
+    setName((n) => n || info.name);
+  }
+
+  // Tới từ trang đăng nhập (email Google chưa có tài khoản): nhận phiên Google đó, khỏi bấm lại
+  useEffect(() => {
+    try {
+      const c = sessionStorage.getItem("gcred");
+      if (c) { sessionStorage.removeItem("gcred"); applyGoogle(c); }
+    } catch { /* không bắt buộc */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Giải mã 1 dòng kênh khi học viên rời ô input (hoặc dán xong)
   async function checkChan(i: number) {
     const c = chans[i];
@@ -88,7 +108,7 @@ export default function RegisterPage() {
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: name, phone, class_id: classId, channels: chans }),
+        body: JSON.stringify({ full_name: name, phone, email, google_credential: gcred ?? undefined, class_id: classId, channels: chans }),
       });
       const d = await res.json();
       if (res.ok) {
@@ -97,6 +117,9 @@ export default function RegisterPage() {
       } else if (res.status === 409 && d.phone_exists) {
         setOtpMode(true);
         toast("SĐT đã đăng ký — đăng nhập bằng OTP bên dưới");
+      } else if (d.google_expired) {
+        setGcred(null);
+        toast(d.error ?? "Phiên Google đã hết hạn — bấm Google lại nhé");
       } else {
         toast(d.error ?? "Có lỗi xảy ra");
       }
@@ -176,6 +199,32 @@ export default function RegisterPage() {
             <div className="field">
               <label>Số điện thoại (Zalo)</label>
               <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="09xx xxx xxx" inputMode="tel" />
+            </div>
+            <div className="field">
+              <label>Email</label>
+              <input
+                type="email"
+                value={email}
+                readOnly={!!gcred}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ten@gmail.com"
+                autoComplete="email"
+              />
+              {gcred ? (
+                <p className="mini-note" style={{ color: "#12A150", fontWeight: 600 }}>
+                  ✓ Email đã xác minh qua Google — dùng email này để đăng nhập bằng Google.{" "}
+                  <a href="#" onClick={(e) => { e.preventDefault(); setGcred(null); setEmail(""); }}>Đổi email</a>
+                </p>
+              ) : (
+                <>
+                  <p className="mini-note">Dùng email này để đăng nhập bằng Google sau này.</p>
+                  <GoogleButton
+                    text="continue_with"
+                    onCredential={applyGoogle}
+                    intro={<p className="mini-note" style={{ margin: "10px 0 6px" }}>Hoặc điền nhanh và xác minh email bằng Google:</p>}
+                  />
+                </>
+              )}
             </div>
             <div className="field">
               <label>Lớp học</label>

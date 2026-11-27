@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/api";
+import { emailColumnReady } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
-/** Danh sách học viên + tìm kiếm theo tên/ID/SĐT, lọc theo lớp. */
+/** Danh sách học viên + tìm kiếm theo tên/ID/SĐT/email, lọc theo lớp. */
 export async function GET(req: NextRequest) {
   const auth = requireAdmin();
   if ("error" in auth) return auth.error;
@@ -17,7 +18,11 @@ export async function GET(req: NextRequest) {
     .select("id, public_id, full_name, phone, status, classes(name)")
     .order("created_at", { ascending: false })
     .limit(500);
-  if (q) query = query.or(`full_name.ilike.%${q}%,public_id.ilike.%${q}%,phone.ilike.%${q}%`);
+  if (q) {
+    const cols = ["full_name", "public_id", "phone"];
+    if (await emailColumnReady(db)) cols.push("email");
+    query = query.or(cols.map((c) => `${c}.ilike.%${q}%`).join(","));
+  }
   if (classId) query = query.eq("class_id", classId);
   const { data: students } = await query;
   const ids = (students ?? []).map((s) => s.id);

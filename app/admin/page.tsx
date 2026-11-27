@@ -714,7 +714,7 @@ export default function AdminPage() {
                 <option value="">Tất cả lớp</option>
                 {stClasses.map((c) => <option key={c.id} value={c.id}>{c.name}{c.is_active ? "" : " (ẩn)"}</option>)}
               </select>
-              <input placeholder="Tìm theo tên, ID, SĐT…" style={{ maxWidth: 220, marginLeft: 8 }}
+              <input placeholder="Tìm theo tên, ID, SĐT, email…" style={{ maxWidth: 220, marginLeft: 8 }}
                 value={q} onChange={(e) => setQ(e.target.value)} />
             </h3>
             <div className="table-scroll">
@@ -1126,7 +1126,11 @@ export default function AdminPage() {
               {profile.student.full_name} · <span style={{ color: "var(--orange)" }}>{profile.student.public_id}</span>
             </h3>
             <p className="mini-note" style={{ marginBottom: 14 }}>
-              SĐT: {profile.student.phone} · Lớp: {profile.student.classes?.name ?? "—"} ·{" "}
+              SĐT: {profile.student.phone} · Email:{" "}
+              {profile.student.email
+                ? <>{profile.student.email} {profile.student.email_verified ? "✓" : <span title="Học viên tự gõ, Google chưa xác nhận">(chưa xác minh)</span>}</>
+                : "—"}{" "}
+              · Lớp: {profile.student.classes?.name ?? "—"} ·{" "}
               {profile.student.status === "locked" ? "🔒 Đang bị khóa" : "Đang hoạt động"}
               <button className="btn-ghost btn-sm btn-danger" style={{ marginLeft: 10 }} onClick={toggleLock}>
                 {profile.student.status === "locked" ? "Mở khóa" : "Khóa học viên"}

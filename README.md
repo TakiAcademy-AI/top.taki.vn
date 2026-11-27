@@ -57,6 +57,13 @@ curl "http://localhost:3300/api/cron/daily-scoring?secret=CRON_SECRET_CUA_SEP"
 - Thông báo Zalo, huy hiệu, màn trình chiếu sự kiện, vai trò trợ giảng — V2 theo lộ trình.
 - Engine quét trực tiếp phụ thuộc cấu trúc trang công khai của TikTok/Facebook — nền tảng đổi giao diện thì cần vá parser trong `lib/scrape.ts` (binary tải tự động lúc build qua `nixpacks.toml`).
 
+## Đăng nhập bằng Google + email học viên
+
+- Đăng ký kênh có ô **Email** (bắt buộc); bấm nút Google ngay dưới ô đó thì email được Google xác minh luôn. Học viên cũ (chưa có email) vào Dashboard bấm **Liên kết Google** là dùng được.
+- Đăng nhập Google nhận ra học viên bằng email trong hồ sơ. Vẫn đăng nhập được bằng SĐT như cũ.
+- Bật tính năng: chạy `supabase/migrations/0002_student_email.sql` (**trước khi deploy**), rồi đặt biến `GOOGLE_CLIENT_ID` (hướng dẫn tạo ở `.env.example`). Chưa đặt biến thì nút Google tự ẩn.
+- Server tự kiểm chữ ký ID token của Google (`lib/google.ts`), không cần client secret.
+
 ## Quét dữ liệu & bảng xếp hạng chi tiết
 
 - **Admin > tab "Quét dữ liệu"**: bật-tắt từng nền tảng, nút **Quét ngay** và **Tính điểm lại hôm nay**, nhật ký 20 lượt quét gần nhất, cảnh báo kênh chưa quét được và kênh bị gắn cờ gian lận.

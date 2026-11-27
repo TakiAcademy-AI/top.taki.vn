@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireStudent, jsonError } from "@/lib/api";
 import { addDays, todayVN } from "@/lib/format";
+import { emailColumnReady } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,15 @@ export async function GET() {
     .eq("id", sid)
     .maybeSingle();
   if (!student) return jsonError("Không tìm thấy hồ sơ", 404);
+
+  // Email đọc riêng + chỉ khi đã chạy migration: học viên cũ không bao giờ bị lỗi trang vì cột mới
+  let email: string | null = null;
+  let emailVerified = false;
+  if (await emailColumnReady(db)) {
+    const { data: e } = await db.from("students").select("email, email_verified").eq("id", sid).maybeSingle();
+    email = e?.email ?? null;
+    emailVerified = !!e?.email_verified;
+  }
 
   const { data: channelsRaw } = await db
     .from("channels")
@@ -85,6 +95,8 @@ export async function GET() {
       public_id: student.public_id,
       full_name: student.full_name,
       class_name: (student as any).classes?.name ?? null,
+      email,
+      email_verified: emailVerified,
     },
     channels: channels ?? [],
     stats,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireAdmin, jsonError } from "@/lib/api";
+import { emailColumnReady } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq("id", params.id)
     .maybeSingle();
   if (!student) return jsonError("Không tìm thấy học viên", 404);
+
+  let email: { email: string | null; email_verified: boolean } = { email: null, email_verified: false };
+  if (await emailColumnReady(db)) {
+    const { data: e } = await db.from("students").select("email, email_verified").eq("id", params.id).maybeSingle();
+    if (e) email = { email: e.email ?? null, email_verified: !!e.email_verified };
+  }
 
   const { data: channels } = await db
     .from("channels")
@@ -48,7 +55,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq("student_id", params.id);
 
   return NextResponse.json({
-    student,
+    student: { ...student, ...email },
     channels: (channels ?? []).map(({ fb_token, ...c }: any) => ({ ...c, has_token: !!fb_token, latest: latestByCh.get(c.id) ?? null })),
     participations: (parts ?? []).map((p: any) => ({
       campaign_id: p.campaign_id,

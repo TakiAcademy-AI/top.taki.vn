@@ -4,9 +4,10 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { Lane, LBRow, METRIC_LABEL, PF_ICON, ProfileModal, SiteHeader, useToast } from "@/components/ui";
+import { GoogleButton } from "@/components/google-button";
 
 type Me = {
-  student: { public_id: string; full_name: string; class_name: string | null };
+  student: { public_id: string; full_name: string; class_name: string | null; email: string | null; email_verified: boolean };
   channels: { id: string; platform: string; username: string; url: string; status: string; created_at: string; has_token?: boolean; fb_page_id?: string | null }[];
   stats: {
     followers7: number; views7: number; videos7: number;
@@ -78,6 +79,16 @@ export default function DashboardPage() {
       body: JSON.stringify({ channel_id: channelId }),
     });
     if (r.ok) { toast("Đã gỡ kết nối"); load(); }
+  }
+
+  async function linkGoogle(credential: string) {
+    const r = await fetch("/api/me/google", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) { toast(`✅ Đã liên kết Google (${d.email}). Từ nay đăng nhập bằng Google được.`); load(); }
+    else toast(d.error ?? "Không liên kết được Google");
   }
 
   async function selfVerify(channelId: string) {
@@ -312,6 +323,26 @@ export default function DashboardPage() {
                   </div>
                 );
               })()}
+            </div>
+
+            <div className="card" style={{ marginTop: 16 }}>
+              <h3>📧 Email đăng nhập</h3>
+              {me.student.email && me.student.email_verified ? (
+                <p className="mini-note" style={{ margin: 0 }}>
+                  <b>{me.student.email}</b> <span className="st st-ok" style={{ marginLeft: 6 }}>Đã liên kết Google</span>
+                  <br />Bạn có thể đăng nhập bằng nút Google với email này.
+                </p>
+              ) : (
+                <>
+                  <p className="mini-note" style={{ marginTop: 0 }}>
+                    {me.student.email ? <>Email đã khai: <b>{me.student.email}</b> (chưa xác minh). </> : "Chưa có email trong hồ sơ. "}
+                    Liên kết Google để đăng nhập nhanh, khỏi nhập số điện thoại.
+                  </p>
+                  <div style={{ marginTop: 10 }}>
+                    <GoogleButton text="continue_with" onCredential={linkGoogle} />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="grid grid-3" style={{ marginTop: 16 }}>
